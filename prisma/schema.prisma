@@ -1,0 +1,581 @@
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ==========================================
+// 1. IDENTIDAD Y ACCESO
+// ==========================================
+
+enum RolNombre {
+  ADMIN
+  ESTUDIANTE
+  REVISOR_ACADEMICO
+  TUTOR
+}
+
+model Usuario {
+  id               String       @id @default(uuid())
+  correo           String       @unique
+  contrasenaHash   String
+  nombreCompleto   String
+  activo           Boolean      @default(true)
+  correoVerificado Boolean      @default(false)
+  creadoEn         DateTime     @default(now())
+  actualizadoEn    DateTime     @updatedAt
+
+  roles             UsuarioRol[]
+  sesiones          SesionToken[]
+  intentos          IntentoSimulador[]
+  resultados        ResultadoIntento[]
+  suscripciones     Suscripcion[]
+  pruebaGratuita    PruebaGratuita?
+  perfilConocimiento PerfilConocimiento?
+  transacciones     TransaccionPago[]
+  preferenciaAccesibilidad PreferenciaAccesibilidad?
+
+  preguntasCreadas   Pregunta[]        @relation("PreguntaCreador")
+  preguntasRevisadas PreguntaVersion[] @relation("PreguntaRevisor")
+
+  @@map("usuarios")
+}
+
+model Rol {
+  id          String       @id @default(uuid())
+  nombre      RolNombre    @unique
+  descripcion String?
+  usuarios    UsuarioRol[]
+
+  @@map("roles")
+}
+
+model UsuarioRol {
+  usuarioId  String
+  rolId      String
+  asignadoEn DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  rol     Rol     @relation(fields: [rolId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, rolId])
+  @@map("usuario_roles")
+}
+
+model SesionToken {
+  id        String   @id @default(uuid())
+  usuarioId String
+  tokenHash String
+  revocado  Boolean  @default(false)
+  expiraEn  DateTime
+  creadoEn  DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, revocado])
+  @@map("sesiones_tokens")
+}
+
+// ==========================================
+// 2. CATÁLOGO ACADÉMICO
+// ==========================================
+
+model Examen {
+  id       String     @id @default(uuid())
+  codigo   String     @unique // CACES_EC, SNNA_EC
+  nombre   String
+  pais     String     @default("EC")
+  activo   Boolean    @default(true)
+  creadoEn DateTime   @default(now())
+
+  programas Programa[]
+
+  @@map("examenes")
+}
+
+model Programa {
+  id          String           @id @default(uuid())
+  examenId    String
+  codigo      String           @unique // MEDICINA, ODONTOLOGIA, ENFERMERIA
+  nombre      String
+  descripcion String?
+  activo      Boolean          @default(true)
+  creadoEn    DateTime         @default(now())
+
+  examen               Examen               @relation(fields: [examenId], references: [id], onDelete: Cascade)
+  versionesTemarios    TemarioVersion[]
+  plantillasSimuladores SimuladorPlantilla[]
+  intentos             IntentoSimulador[]
+
+  @@map("programas")
+}
+
+model TemarioVersion {
+  id            String          @id @default(uuid())
+  programaId    String
+  codigoVersion String          // ej. "2026.1"
+  activo        Boolean         @default(true)
+  fechaVigencia DateTime?
+  creadoEn      DateTime        @default(now())
+
+  programa Programa        @relation(fields: [programaId], references: [id], onDelete: Cascade)
+  areas    AreaAcademica[]
+
+  @@unique([programaId, codigoVersion])
+  @@map("versiones_temarios")
+}
+
+model AreaAcademica {
+  id               String   @id @default(uuid())
+  temarioVersionId String
+  nombre           String
+  descripcion      String?
+
+  temarioVersion     TemarioVersion                @relation(fields: [temarioVersionId], references: [id], onDelete: Cascade)
+  competencias       Competencia[]
+  detallesResultado  ResultadoDetalleCompetencia[]
+
+  @@map("areas_academicas")
+}
+
+model Competencia {
+  id              String   @id @default(uuid())
+  areaAcademicaId String
+  codigo          String
+  descripcion     String
+
+  areaAcademica     AreaAcademica                 @relation(fields: [areaAcademicaId], references: [id], onDelete: Cascade)
+  temas             Tema[]
+  detallesResultado ResultadoDetalleCompetencia[]
+
+  @@unique([areaAcademicaId, codigo])
+  @@map("competencias")
+}
+
+model Tema {
+  id            String   @id @default(uuid())
+  competenciaId String
+  nombre        String
+  descripcion   String?
+
+  competencia      Competencia           @relation(fields: [competenciaId], references: [id], onDelete: Cascade)
+  subtemas         Subtema[]
+  preguntas        Pregunta[]
+  registrosDominio RegistroDominioTema[]
+
+  @@map("temas")
+}
+
+model Subtema {
+  id     String @id @default(uuid())
+  temaId String
+  nombre String
+
+  tema      Tema       @relation(fields: [temaId], references: [id], onDelete: Cascade)
+  preguntas Pregunta[]
+
+  @@map("subtemas")
+}
+
+// ==========================================
+// 3. BANCO DE PREGUNTAS INMUTABLE Y VERSIONADO
+// ==========================================
+
+enum EstadoPregunta {
+  BORRADOR
+  EN_REVISION
+  APROBADA
+  PUBLICADA
+  RETIRADA
+}
+
+enum DificultadPregunta {
+  FACIL
+  MEDIA
+  DIFICIL
+}
+
+enum TipoPregunta {
+  OPCION_MULTIPLE
+  CASO_CLINICO
+}
+
+enum TipoMultimedia {
+  RAYOS_X
+  ECG
+  HISTOLOGIA
+  CASO_CLINICO
+  OTRO
+}
+
+model Pregunta {
+  id            String   @id @default(uuid())
+  temaId        String
+  subtemaId     String?
+  codigoPublico String   @unique
+  creadorId     String
+  creadoEn      DateTime @default(now())
+
+  tema       Tema              @relation(fields: [temaId], references: [id], onDelete: Restrict)
+  subtema    Subtema?          @relation(fields: [subtemaId], references: [id], onDelete: SetNull)
+  creador    Usuario           @relation("PreguntaCreador", fields: [creadorId], references: [id], onDelete: Restrict)
+  versiones  PreguntaVersion[]
+  respuestas RespuestaIntento[]
+
+  @@map("preguntas")
+}
+
+model PreguntaVersion {
+  id                    String             @id @default(uuid())
+  preguntaId            String
+  numeroVersion         Int                @default(1)
+  enunciado             String             @db.Text
+  explicacionPedagogica String             @db.Text
+  dificultad            DificultadPregunta @default(MEDIA)
+  tipo                  TipoPregunta       @default(OPCION_MULTIPLE)
+  estado                EstadoPregunta     @default(BORRADOR)
+  revisorId             String?
+  fechaRevision         DateTime?
+  creadoEn              DateTime           @default(now())
+
+  pregunta          Pregunta            @relation(fields: [preguntaId], references: [id], onDelete: Cascade)
+  revisor           Usuario?            @relation("PreguntaRevisor", fields: [revisorId], references: [id], onDelete: SetNull)
+  opciones          PreguntaOpcion[]
+  referencias       PreguntaReferencia[]
+  activosMultimedia ActivoMultimedia[]
+  respuestas        RespuestaIntento[]
+
+  @@unique([preguntaId, numeroVersion])
+  @@index([estado, dificultad])
+  @@map("versiones_preguntas")
+}
+
+model PreguntaOpcion {
+  id                          String  @id @default(uuid())
+  preguntaVersionId           String
+  texto                       String  @db.Text
+  esCorrecta                  Boolean @default(false)
+  orden                       Int
+  retroalimentacionEspecifica String? @db.Text
+
+  preguntaVersion PreguntaVersion    @relation(fields: [preguntaVersionId], references: [id], onDelete: Cascade)
+  respuestas      RespuestaIntento[]
+
+  @@map("opciones_preguntas")
+}
+
+model PreguntaReferencia {
+  id                      String  @id @default(uuid())
+  preguntaVersionId       String
+  fuente                  String
+  autor                   String?
+  anio                    Int?
+  referenciaBibliografica String  @db.Text
+  urlReferencia           String?
+  tipoLicencia            String  @default("REFERENCIA_ACADEMICA")
+  observaciones           String?
+
+  preguntaVersion PreguntaVersion @relation(fields: [preguntaVersionId], references: [id], onDelete: Cascade)
+
+  @@map("referencias_preguntas")
+}
+
+model ActivoMultimedia {
+  id                String         @id @default(uuid())
+  preguntaVersionId String
+  nombreArchivo     String
+  urlAlmacenamiento String
+  tipoMime          String
+  tipoActivo        TipoMultimedia @default(OTRO)
+  pesoBytes         Int
+  licenciaUso       String         @default("PROPIO")
+  creadoEn          DateTime       @default(now())
+
+  preguntaVersion PreguntaVersion @relation(fields: [preguntaVersionId], references: [id], onDelete: Cascade)
+
+  @@map("activos_multimedia")
+}
+
+// ==========================================
+// 4. MOTOR DE EVALUACIÓN
+// ==========================================
+
+enum TipoSimulador {
+  DIAGNOSTICO
+  SIMULACRO_REAL
+  PRACTICA_LIBRE
+}
+
+enum EstadoIntento {
+  EN_PROGRESO
+  FINALIZADO
+  ABANDONADO
+  EXPIRADO_POR_TIEMPO
+}
+
+model SimuladorPlantilla {
+  id                String        @id @default(uuid())
+  programaId        String
+  titulo            String
+  descripcion       String?
+  tipo              TipoSimulador @default(SIMULACRO_REAL)
+  duracionMinutos   Int
+  totalPreguntas    Int
+  ponderacionConfig Json?
+  activo            Boolean       @default(true)
+  creadoEn          DateTime      @default(now())
+
+  programa Programa           @relation(fields: [programaId], references: [id], onDelete: Cascade)
+  intentos IntentoSimulador[]
+
+  @@map("plantillas_simuladores")
+}
+
+model IntentoSimulador {
+  id                     String        @id @default(uuid())
+  usuarioId              String
+  plantillaSimuladorId   String?
+  programaId             String
+  estado                 EstadoIntento @default(EN_PROGRESO)
+  iniciadoEn             DateTime      @default(now())
+  finalizadoEn           DateTime?
+  tiempoConsumidoSegundos Int          @default(0)
+
+  usuario            Usuario             @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  plantillaSimulador SimuladorPlantilla? @relation(fields: [plantillaSimuladorId], references: [id], onDelete: SetNull)
+  programa           Programa            @relation(fields: [programaId], references: [id], onDelete: Restrict)
+  respuestas         RespuestaIntento[]
+  resultado          ResultadoIntento?
+
+  @@index([usuarioId, estado])
+  @@index([programaId])
+  @@map("intentos_simuladores")
+}
+
+model RespuestaIntento {
+  id                    String   @id @default(uuid())
+  intentoId             String
+  preguntaId            String
+  preguntaVersionId     String
+  opcionSeleccionadaId  String?
+  esCorrecta            Boolean  @default(false)
+  tiempoRespuestaSegundos Int?
+  respondidoEn          DateTime @default(now())
+
+  intento            IntentoSimulador @relation(fields: [intentoId], references: [id], onDelete: Cascade)
+  pregunta           Pregunta         @relation(fields: [preguntaId], references: [id], onDelete: Restrict)
+  preguntaVersion    PreguntaVersion  @relation(fields: [preguntaVersionId], references: [id], onDelete: Restrict)
+  opcionSeleccionada PreguntaOpcion?  @relation(fields: [opcionSeleccionadaId], references: [id], onDelete: SetNull)
+
+  @@unique([intentoId, preguntaId])
+  @@index([intentoId])
+  @@map("respuestas_intentos")
+}
+
+model ResultadoIntento {
+  id               String   @id @default(uuid())
+  intentoId        String   @unique
+  usuarioId        String
+  puntuacionTotal  Float
+  totalPreguntas   Int
+  totalAciertos    Int
+  totalErrores     Int
+  totalOmitidas    Int
+  porcentajeGlobal Float
+  aprobado         Boolean  @default(false)
+  calculadoEn      DateTime @default(now())
+
+  intento              IntentoSimulador              @relation(fields: [intentoId], references: [id], onDelete: Cascade)
+  usuario              Usuario                       @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  detallesCompetencias ResultadoDetalleCompetencia[]
+
+  @@index([usuarioId])
+  @@map("resultados_intentos")
+}
+
+model ResultadoDetalleCompetencia {
+  id                 String @id @default(uuid())
+  resultadoIntentoId String
+  competenciaId      String
+  areaAcademicaId    String
+  totalPreguntas     Int
+  aciertos           Int
+  porcentajeLogrado  Float
+
+  resultadoIntento ResultadoIntento @relation(fields: [resultadoIntentoId], references: [id], onDelete: Cascade)
+  competencia      Competencia      @relation(fields: [competenciaId], references: [id], onDelete: Restrict)
+  areaAcademica    AreaAcademica    @relation(fields: [areaAcademicaId], references: [id], onDelete: Restrict)
+
+  @@map("resultados_detalles_competencias")
+}
+
+// ==========================================
+// 5. PERFIL DE CONOCIMIENTO
+// ==========================================
+
+model PerfilConocimiento {
+  id              String   @id @default(uuid())
+  usuarioId       String   @unique
+  nivelEstimado   Float    @default(0)
+  totalSimulacros Int      @default(0)
+  actualizadoEn   DateTime @updatedAt
+
+  usuario          Usuario               @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  registrosDominio RegistroDominioTema[]
+
+  @@map("perfiles_conocimiento")
+}
+
+model RegistroDominioTema {
+  id                   String   @id @default(uuid())
+  perfilConocimientoId String
+  temaId               String
+  totalRespondidas     Int      @default(0)
+  totalAciertos        Int      @default(0)
+  porcentajeDominio    Float    @default(0)
+  actualizadoEn        DateTime @updatedAt
+
+  perfilConocimiento PerfilConocimiento @relation(fields: [perfilConocimientoId], references: [id], onDelete: Cascade)
+  tema               Tema               @relation(fields: [temaId], references: [id], onDelete: Cascade)
+
+  @@unique([perfilConocimientoId, temaId])
+  @@map("registros_dominio_temas")
+}
+
+// ==========================================
+// 6. MONETIZACIÓN Y SUSCRIPCIONES
+// ==========================================
+
+enum EstadoSuscripcion {
+  PENDIENTE
+  ACTIVA
+  VENCIDA
+  CANCELADA
+  PAUSADA
+}
+
+enum EstadoPago {
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+  REEMBOLSADO
+}
+
+model PlanSuscripcion {
+  id                      String   @id @default(uuid())
+  codigo                  String   @unique // GRATUITO, PRO_MENSUAL
+  nombre                  String
+  descripcion             String?
+  precioCentavos          Int
+  moneda                  String   @default("USD")
+  periodoDias             Int      @default(30)
+  limitePreguntasDiarias  Int?
+  permiteSimuladorReal    Boolean  @default(true)
+  permiteAnalisisAvanzado Boolean  @default(true)
+  activo                  Boolean  @default(true)
+  creadoEn                DateTime @default(now())
+
+  suscripciones Suscripcion[]
+
+  @@map("planes_suscripcion")
+}
+
+model PruebaGratuita {
+  id                    String    @id @default(uuid())
+  usuarioId             String    @unique
+  preguntasConsumidas   Int       @default(0)
+  simuladoresConsumidos Int       @default(0)
+  fechaExpiracion       DateTime?
+  creadoEn              DateTime  @default(now())
+  actualizadoEn         DateTime  @updatedAt
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("pruebas_gratuitas")
+}
+
+model Suscripcion {
+  id          String            @id @default(uuid())
+  usuarioId   String
+  planId      String
+  estado      EstadoSuscripcion @default(PENDIENTE)
+  iniciaEn    DateTime          @default(now())
+  renuevaEn   DateTime
+  cancelaEn   DateTime?
+  creadoEn    DateTime          @default(now())
+  actualizadoEn DateTime        @updatedAt
+
+  usuario       Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  plan          PlanSuscripcion   @relation(fields: [planId], references: [id], onDelete: Restrict)
+  transacciones TransaccionPago[]
+
+  @@index([usuarioId, estado])
+  @@map("suscripciones")
+}
+
+model TransaccionPago {
+  id                String     @id @default(uuid())
+  suscripcionId     String?
+  usuarioId         String
+  referenciaExterna String     @unique
+  proveedor         String     @default("MOCK")
+  montoCentavos     Int
+  moneda            String     @default("USD")
+  estado            EstadoPago @default(PENDIENTE)
+  metadatos         Json?
+  creadoEn          DateTime   @default(now())
+  actualizadoEn     DateTime   @updatedAt
+
+  usuario     Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  suscripcion Suscripcion? @relation(fields: [suscripcionId], references: [id], onDelete: SetNull)
+
+  @@map("transacciones_pagos")
+}
+
+// ==========================================
+// 7. PREFERENCIAS DE ACCESIBILIDAD E INCLUSIÓN
+// ==========================================
+
+enum TamanoTexto {
+  PEQUENO
+  NORMAL
+  GRANDE
+  EXTRA_GRANDE
+}
+
+enum EspaciadoTexto {
+  NORMAL
+  AMPLIO
+  EXTRA_AMPLIO
+}
+
+enum PaletaColor {
+  ESTANDAR
+  PROTANOPIA
+  DEUTERANOPIA
+  TRITANOPIA
+  MONOCROMATICO
+}
+
+model PreferenciaAccesibilidad {
+  id                  String         @id @default(uuid())
+  usuarioId           String         @unique
+  tamanoTexto         TamanoTexto    @default(NORMAL)
+  altoContraste       Boolean        @default(false)
+  fuenteDislexia      Boolean        @default(false)
+  espaciadoTexto      EspaciadoTexto @default(NORMAL)
+  movimientoReducido  Boolean        @default(false)
+  subtitulosActivados Boolean        @default(false)
+  cursorGrande        Boolean        @default(false)
+  lecturaGuiada       Boolean        @default(false)
+  paletaColor         PaletaColor    @default(ESTANDAR)
+  sintesisVozLectura  Boolean        @default(false)
+  creadoEn            DateTime       @default(now())
+  actualizadoEn       DateTime       @updatedAt
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@map("preferencias_accesibilidad")
+}

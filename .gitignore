@@ -1,0 +1,40 @@
+# Compilación y artefactos
+/dist
+/build
+
+# Dependencias
+/node_modules
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+
+# Variables de entorno y secretos (NUNCA SUBIR A GIT)
+.env
+.env.local
+.env.*.local
+*.env
+!.env.example
+
+# Logs y bases de datos locales
+logs
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Pruebas y cobertura
+/coverage
+*.lcov
+.nyc_output
+
+# Editores y Sistema Operativo
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
