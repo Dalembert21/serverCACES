@@ -15,7 +15,7 @@ const adapter = new PrismaPg({ connectionString });
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-  console.log('🌱 Iniciando Seed Idempotente para CACES SaaS...');
+  console.log('🌱 Iniciando Seed Idempotente para CACES SaaS (Modelo Enterprise)...');
 
   // 1. Roles y Usuarios
   const { roles, usuarios } = await obtenerDatosSeguridad();
@@ -24,11 +24,26 @@ async function main() {
     await prisma.rol.upsert({
       where: { nombre: rol.nombre },
       update: { descripcion: rol.descripcion },
-      create: rol,
+      create: {
+        id: rol.nombre,
+        nombre: rol.nombre,
+        descripcion: rol.descripcion,
+      },
     });
   }
 
-  console.log('2. Sembrando usuarios del sistema...');
+  // 2. Planes Comerciales
+  console.log('2. Sembrando planes comerciales...');
+  const { planes } = obtenerDatosComerciales();
+  for (const plan of planes) {
+    await prisma.planSuscripcion.upsert({
+      where: { id: plan.id },
+      update: plan,
+      create: plan,
+    });
+  }
+
+  console.log('3. Sembrando usuarios del sistema...');
   const usuariosCreados: Record<string, string> = {};
   for (const usr of usuarios) {
     const rolDb = await prisma.rol.findUniqueOrThrow({
@@ -65,75 +80,71 @@ async function main() {
       },
     });
 
-    // Crear registro de prueba gratuita para cuentas de estudiantes demo
+    // Suscripción base para estudiantes demo
     if (usr.rol === 'ESTUDIANTE') {
-      await prisma.pruebaGratuita.upsert({
+      const expiraEn = new Date();
+      expiraEn.setDate(expiraEn.getDate() + 365);
+
+      const subExistente = await prisma.suscripcionUsuario.findFirst({
         where: { usuarioId: usuarioDb.id },
-        update: {},
-        create: {
-          usuarioId: usuarioDb.id,
-          preguntasConsumidas: 0,
-          simuladoresConsumidos: 0,
-        },
       });
+
+      if (!subExistente) {
+        await prisma.suscripcionUsuario.create({
+          data: {
+            usuarioId: usuarioDb.id,
+            planId: 'PLAN_GRATUITO_BASE',
+            estado: 'ACTIVA',
+            iniciaEn: new Date(),
+            expiraEn,
+            preguntasGratisConsumidas: 0,
+            simuladoresGratisConsumidos: 0,
+          },
+        });
+      }
     }
   }
 
-  // 2. Planes Comerciales
-  console.log('3. Sembrando planes comerciales...');
-  const { planes } = obtenerDatosComerciales();
-  for (const plan of planes) {
-    await prisma.planSuscripcion.upsert({
-      where: { codigo: plan.codigo },
-      update: plan,
-      create: plan,
-    });
-  }
+  // 3. Catálogo Académico (Programas, Temarios, Competencias)
+  console.log('4. Sembrando catálogo académico oficial CACES...');
+  const { programas } = obtenerDatosAcademicos();
 
-  // 3. Catálogo Académico (Examen, Programas, Temarios, Competencias, Temas)
-  console.log('4. Sembrando catálogo académico (CACES Medicina, Odontología, Enfermería)...');
-  const { examen, programas } = obtenerDatosAcademicos();
-  const examenDb = await prisma.examen.upsert({
-    where: { codigo: examen.codigo },
-    update: { nombre: examen.nombre, pais: examen.pais },
-    create: examen,
-  });
-
-  const temasMap: Record<string, string> = {};
+  const subareasMap: Record<string, string> = {};
 
   for (const prog of programas) {
-    const programaDb = await prisma.programa.upsert({
-      where: { codigo: prog.codigo },
+    const programaDb = await prisma.programaAcademico.upsert({
+      where: { id: prog.codigo },
       update: {
         nombre: prog.nombre,
         descripcion: prog.descripcion,
-        examenId: examenDb.id,
+        codigoOficialCaces: `CACES-${prog.codigo}`,
       },
       create: {
-        examenId: examenDb.id,
-        codigo: prog.codigo,
+        id: prog.codigo,
+        codigoOficialCaces: `CACES-${prog.codigo}`,
         nombre: prog.nombre,
         descripcion: prog.descripcion,
       },
     });
 
-    // Temario Versión 2026.1
+    // Versión Temario Oficial 2026.1
     const temarioVersion = await prisma.temarioVersion.upsert({
       where: {
-        programaId_codigoVersion: {
-          programaId: programaDb.id,
+        programaAcademicoId_codigoVersion: {
+          programaAcademicoId: programaDb.id,
           codigoVersion: '2026.1',
         },
       },
       update: {},
       create: {
-        programaId: programaDb.id,
+        programaAcademicoId: programaDb.id,
         codigoVersion: '2026.1',
-        fechaVigencia: new Date('2026-12-31'),
+        fechaInicioVigencia: new Date('2026-01-01'),
+        fechaFinVigencia: new Date('2026-12-31'),
       },
     });
 
-    // Áreas y competencias
+    // Áreas y Subáreas de Competencia CACES
     for (const area of prog.areas) {
       let areaDb = await prisma.areaAcademica.findFirst({
         where: {
@@ -147,90 +158,64 @@ async function main() {
           data: {
             temarioVersionId: temarioVersion.id,
             nombre: area.nombre,
+            pesoPorcentual: Math.round(100 / (prog.areas.length || 1)),
           },
         });
       }
 
       for (const comp of area.competencias) {
-        const compDb = await prisma.competencia.upsert({
+        const subareaDb = await prisma.subareaCompetencia.upsert({
           where: {
-            areaAcademicaId_codigo: {
+            areaAcademicaId_codigoOficial: {
               areaAcademicaId: areaDb.id,
-              codigo: comp.codigo,
+              codigoOficial: comp.codigo,
             },
           },
-          update: { descripcion: comp.descripcion },
+          update: {
+            nombre: comp.descripcion.slice(0, 100),
+            descripcion: comp.descripcion,
+          },
           create: {
             areaAcademicaId: areaDb.id,
-            codigo: comp.codigo,
+            codigoOficial: comp.codigo,
+            nombre: comp.descripcion.slice(0, 100),
             descripcion: comp.descripcion,
           },
         });
 
+        // Mapear temas hacia subáreas
         for (const tema of comp.temas) {
-          let temaDb = await prisma.tema.findFirst({
-            where: {
-              competenciaId: compDb.id,
-              nombre: tema.nombre,
-            },
-          });
-
-          if (!temaDb) {
-            temaDb = await prisma.tema.create({
-              data: {
-                competenciaId: compDb.id,
-                nombre: tema.nombre,
-              },
-            });
-          }
-
-          temasMap[tema.nombre] = temaDb.id;
-
-          for (const subtemaNombre of tema.subtemas) {
-            const subtemaExistente = await prisma.subtema.findFirst({
-              where: {
-                temaId: temaDb.id,
-                nombre: subtemaNombre,
-              },
-            });
-
-            if (!subtemaExistente) {
-              await prisma.subtema.create({
-                data: {
-                  temaId: temaDb.id,
-                  nombre: subtemaNombre,
-                },
-              });
-            }
-          }
+          subareasMap[tema.nombre] = subareaDb.id;
         }
       }
     }
 
-    // Plantillas de Simuladores
+    // Configuraciones de Simuladores Oficiales
     for (const sim of prog.simuladores) {
-      const simExistente = await prisma.simuladorPlantilla.findFirst({
+      const simExistente = await prisma.configuracionSimulador.findFirst({
         where: {
-          programaId: programaDb.id,
+          programaAcademicoId: programaDb.id,
           titulo: sim.titulo,
         },
       });
 
       if (!simExistente) {
-        await prisma.simuladorPlantilla.create({
+        await prisma.configuracionSimulador.create({
           data: {
-            programaId: programaDb.id,
+            programaAcademicoId: programaDb.id,
             titulo: sim.titulo,
-            descripcion: sim.descripcion,
+            modalidad:
+              sim.totalPreguntas >= 100 ? 'SIMULACRO_OFICIAL' : 'DIAGNOSTICO',
             duracionMinutos: sim.duracionMinutos,
             totalPreguntas: sim.totalPreguntas,
+            notaMinimaAprobacion: 70.0,
           },
         });
       }
     }
   }
 
-  // 4. Preguntas con Casos Clínicos, Opciones y Referencias
+  // 4. Preguntas Clínicas con Versionado Inmutable
   console.log('5. Sembrando banco de preguntas clínicas con versionado...');
   const { preguntasMedicina, preguntasOdontologia, preguntasEnfermeria } =
     obtenerDatosPreguntas();
@@ -244,18 +229,20 @@ async function main() {
   const revisorId = usuariosCreados['revisor.academico@caces-prep.ec'];
 
   for (const item of todasLasPreguntas) {
-    const temaId = temasMap[item.temaNombre];
-    if (!temaId) {
-      console.warn(`Tema no encontrado para pregunta ${item.codigoPublico}: ${item.temaNombre}`);
+    const subareaCompetenciaId = subareasMap[item.temaNombre];
+    if (!subareaCompetenciaId) {
+      console.warn(
+        `Subárea no encontrada para tema de pregunta ${item.codigoPublico}: ${item.temaNombre}`,
+      );
       continue;
     }
 
     const preguntaDb = await prisma.pregunta.upsert({
       where: { codigoPublico: item.codigoPublico },
-      update: { temaId },
+      update: { subareaCompetenciaId },
       create: {
         codigoPublico: item.codigoPublico,
-        temaId,
+        subareaCompetenciaId,
         creadorId: adminId,
       },
     });
@@ -271,7 +258,6 @@ async function main() {
         enunciado: item.enunciado,
         explicacionPedagogica: item.explicacionPedagogica,
         dificultad: item.dificultad,
-        tipo: item.tipo,
         estado: item.estado,
         revisorId,
         fechaRevision: new Date(),
@@ -282,7 +268,6 @@ async function main() {
         enunciado: item.enunciado,
         explicacionPedagogica: item.explicacionPedagogica,
         dificultad: item.dificultad,
-        tipo: item.tipo,
         estado: item.estado,
         revisorId,
         fechaRevision: new Date(),
@@ -298,32 +283,39 @@ async function main() {
       await prisma.preguntaReferencia.create({
         data: {
           preguntaVersionId: versionDb.id,
-          fuente: item.referencia.fuente,
-          autor: item.referencia.autor,
-          anio: item.referencia.anio,
-          referenciaBibliografica: item.referencia.referenciaBibliografica,
-          tipoLicencia: item.referencia.tipoLicencia,
+          fuenteOficial: item.referencia.fuente,
+          tituloPublicacion: item.referencia.referenciaBibliografica,
+          anioPublicacion: item.referencia.anio,
         },
       });
     }
 
     // Opciones de respuesta
-    const opcionesCount = await prisma.preguntaOpcion.count({
-      where: { preguntaVersionId: versionDb.id },
-    });
+    const letras = ['A', 'B', 'C', 'D'];
+    for (let i = 0; i < item.opciones.length; i++) {
+      const opc = item.opciones[i];
+      const letra = letras[i] || 'A';
 
-    if (opcionesCount === 0) {
-      for (const opc of item.opciones) {
-        await prisma.preguntaOpcion.create({
-          data: {
+      await prisma.preguntaOpcion.upsert({
+        where: {
+          preguntaVersionId_letra: {
             preguntaVersionId: versionDb.id,
-            texto: opc.texto,
-            esCorrecta: opc.esCorrecta,
-            orden: opc.orden,
-            retroalimentacionEspecifica: opc.retroalimentacionEspecifica,
+            letra,
           },
-        });
-      }
+        },
+        update: {
+          texto: opc.texto,
+          esCorrecta: opc.esCorrecta,
+          justificacion: opc.retroalimentacionEspecifica,
+        },
+        create: {
+          preguntaVersionId: versionDb.id,
+          letra,
+          texto: opc.texto,
+          esCorrecta: opc.esCorrecta,
+          justificacion: opc.retroalimentacionEspecifica,
+        },
+      });
     }
   }
 

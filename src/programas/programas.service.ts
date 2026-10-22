@@ -1,4 +1,4 @@
-﻿import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service.js';
 
 @Injectable()
@@ -8,10 +8,10 @@ export class ProgramasService {
   constructor(private readonly prisma: PrismaService) {}
 
   async listarProgramas() {
-    const programasDb = await this.prisma.programa.findMany({
+    const programasDb = await this.prisma.programaAcademico.findMany({
       where: { activo: true },
       include: {
-        plantillasSimuladores: {
+        configuracionesSimulador: {
           where: { activo: true },
           orderBy: { totalPreguntas: 'desc' },
         },
@@ -20,11 +20,7 @@ export class ProgramasService {
           include: {
             areas: {
               include: {
-                competencias: {
-                  include: {
-                    temas: true,
-                  },
-                },
+                subareasCompetencias: true,
               },
             },
           },
@@ -35,9 +31,9 @@ export class ProgramasService {
 
     return programasDb.map((prog) => {
       const plantillaOficial =
-        prog.plantillasSimuladores.find(
-          (p) => p.tipo === 'SIMULACRO_REAL' || p.totalPreguntas >= 100,
-        ) ?? prog.plantillasSimuladores[0];
+        prog.configuracionesSimulador.find(
+          (p) => p.modalidad === 'SIMULACRO_OFICIAL' || p.totalPreguntas >= 100,
+        ) ?? prog.configuracionesSimulador[0];
 
       const temarioActivo = prog.versionesTemarios[0];
       const areasDb = temarioActivo?.areas ?? [];
@@ -45,13 +41,13 @@ export class ProgramasService {
       const areas = areasDb.map((a) => ({
         id: a.id,
         nombre: a.nombre,
-        pesoPorcentual: Math.round(100 / (areasDb.length || 1)),
+        pesoPorcentual: a.pesoPorcentual || Math.round(100 / (areasDb.length || 1)),
         cantidadPreguntasEstimada: Math.round(
           (plantillaOficial?.totalPreguntas ?? 150) / (areasDb.length || 1),
         ),
       }));
 
-      const codigoLower = prog.codigo.toLowerCase();
+      const codigoLower = (prog.codigoOficialCaces || prog.id).toLowerCase();
       const idFrontend = codigoLower.startsWith('caces-')
         ? codigoLower
         : `prog-${codigoLower}`;
@@ -66,7 +62,7 @@ export class ProgramasService {
           `Preparación para el examen oficial CACES de ${prog.nombre}.`,
         totalPreguntasExamen: plantillaOficial?.totalPreguntas ?? 150,
         duracionMinutosExamen: plantillaOficial?.duracionMinutos ?? 240,
-        notaMinimaAprobacion: 70,
+        notaMinimaAprobacion: plantillaOficial?.notaMinimaAprobacion ?? 70,
         areas,
         estaActivo: prog.activo,
       };

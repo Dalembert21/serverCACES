@@ -53,7 +53,7 @@ export class AuthService {
       );
     }
 
-    // Creación transaccional: Usuario + Asignación de Rol + Registro de Prueba Gratuita
+    // Creación transaccional: Usuario + Asignación de Rol + Suscripción Inicial Gratuita
     const nuevoUsuario = await this.prisma.$transaction(async (tx) => {
       const usuario = await tx.usuario.create({
         data: {
@@ -71,11 +71,19 @@ export class AuthService {
         },
       });
 
-      await tx.pruebaGratuita.create({
+      // Crear suscripción inicial en el plan base gratuito (vigencia 1 año)
+      const expiraEn = new Date();
+      expiraEn.setDate(expiraEn.getDate() + 365);
+
+      await tx.suscripcionUsuario.create({
         data: {
           usuarioId: usuario.id,
-          preguntasConsumidas: 0,
-          simuladoresConsumidos: 0,
+          planId: 'PLAN_GRATUITO_BASE',
+          estado: 'ACTIVA',
+          iniciaEn: new Date(),
+          expiraEn,
+          preguntasGratisConsumidas: 0,
+          simuladoresGratisConsumidos: 0,
         },
       });
 
@@ -168,7 +176,7 @@ export class AuthService {
     }
 
     // Validar token en la tabla de sesiones activas
-    const sesion = await this.prisma.sesionToken.findFirst({
+    const sesion = await this.prisma.sesionAutenticacion.findFirst({
       where: {
         usuarioId: payload.sub,
         tokenHash: dto.refreshToken,
@@ -213,7 +221,7 @@ export class AuthService {
    * Cierre de sesión y revocación de tokens
    */
   async cerrarSesion(usuarioId: string) {
-    await this.prisma.sesionToken.updateMany({
+    await this.prisma.sesionAutenticacion.updateMany({
       where: {
         usuarioId,
         revocado: false,
@@ -238,6 +246,9 @@ export class AuthService {
         id: true,
         correo: true,
         nombreCompleto: true,
+        tipoIdentificacion: true,
+        numeroIdentificacion: true,
+        telefonoContacto: true,
         activo: true,
         correoVerificado: true,
         creadoEn: true,
@@ -251,31 +262,27 @@ export class AuthService {
             },
           },
         },
-        pruebaGratuita: {
-          select: {
-            preguntasConsumidas: true,
-            simuladoresConsumidos: true,
-          },
-        },
         suscripciones: {
           where: {
             estado: 'ACTIVA',
           },
           orderBy: {
-            renuevaEn: 'desc',
+            expiraEn: 'desc',
           },
           take: 1,
           select: {
             id: true,
             estado: true,
             iniciaEn: true,
-            renuevaEn: true,
+            expiraEn: true,
+            preguntasGratisConsumidas: true,
+            simuladoresGratisConsumidos: true,
             plan: {
               select: {
-                codigo: true,
+                id: true,
                 nombre: true,
-                permiteSimuladorReal: true,
-                permiteAnalisisAvanzado: true,
+                accesoSimuladoresIlimitados: true,
+                accesoAnaliticaAvanzada: true,
               },
             },
           },
@@ -287,10 +294,16 @@ export class AuthService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
+    const suscripcionActiva = usuario.suscripciones[0] || null;
+
     return {
       ...usuario,
       roles: usuario.roles.map((r) => r.rol.nombre),
-      suscripcionActiva: usuario.suscripciones[0] || null,
+      suscripcionActiva,
+      pruebaGratuita: {
+        preguntasConsumidas: suscripcionActiva?.preguntasGratisConsumidas ?? 0,
+        simuladoresConsumidos: suscripcionActiva?.simuladoresGratisConsumidos ?? 0,
+      },
     };
   }
 
@@ -331,7 +344,7 @@ export class AuthService {
     const expiraEn = new Date();
     expiraEn.setDate(expiraEn.getDate() + 7);
 
-    await this.prisma.sesionToken.create({
+    await this.prisma.sesionAutenticacion.create({
       data: {
         usuarioId,
         tokenHash: refreshToken,

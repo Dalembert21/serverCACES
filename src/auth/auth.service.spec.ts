@@ -25,10 +25,10 @@ describe('AuthService', () => {
       usuarioRol: {
         create: jest.fn(),
       },
-      pruebaGratuita: {
+      suscripcionUsuario: {
         create: jest.fn(),
       },
-      sesionToken: {
+      sesionAutenticacion: {
         create: jest.fn(),
         findFirst: jest.fn(),
         updateMany: jest.fn(),
@@ -99,8 +99,8 @@ describe('AuthService', () => {
 
       expect(resultado).toHaveProperty('tokens');
       expect(resultado.usuario.correo).toBe('nuevo@caces.ec');
-      expect(prisma.pruebaGratuita.create).toHaveBeenCalled();
-      expect(prisma.sesionToken.create).toHaveBeenCalled();
+      expect(prisma.suscripcionUsuario.create).toHaveBeenCalled();
+      expect(prisma.sesionAutenticacion.create).toHaveBeenCalled();
     });
   });
 
