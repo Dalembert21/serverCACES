@@ -41,7 +41,8 @@ export class ProgramasService {
       const areas = areasDb.map((a) => ({
         id: a.id,
         nombre: a.nombre,
-        pesoPorcentual: a.pesoPorcentual || Math.round(100 / (areasDb.length || 1)),
+        pesoPorcentual:
+          a.pesoPorcentual || Math.round(100 / (areasDb.length || 1)),
         cantidadPreguntasEstimada: Math.round(
           (plantillaOficial?.totalPreguntas ?? 150) / (areasDb.length || 1),
         ),

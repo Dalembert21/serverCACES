@@ -86,14 +86,10 @@ describe('AccesibilidadService', () => {
       const resultado = await service.obtenerPreferencias(mockUsuarioId);
 
       expect(resultado).toEqual(mockPreferencia);
-      expect(
-        prisma.preferenciaAccesibilidad.findUnique,
-      ).toHaveBeenCalledWith({
+      expect(prisma.preferenciaAccesibilidad.findUnique).toHaveBeenCalledWith({
         where: { usuarioId: mockUsuarioId },
       });
-      expect(
-        prisma.preferenciaAccesibilidad.create,
-      ).not.toHaveBeenCalled();
+      expect(prisma.preferenciaAccesibilidad.create).not.toHaveBeenCalled();
     });
 
     it('debe inicializar y devolver preferencias por defecto si el usuario no tiene registradas', async () => {
@@ -137,9 +133,7 @@ describe('AccesibilidadService', () => {
         ...mockPreferencia,
         ...dto,
       };
-      prisma.preferenciaAccesibilidad.upsert.mockResolvedValue(
-        mockActualizado,
-      );
+      prisma.preferenciaAccesibilidad.upsert.mockResolvedValue(mockActualizado);
 
       const resultado = await service.actualizarPreferencias(
         mockUsuarioId,
@@ -173,9 +167,7 @@ describe('AccesibilidadService', () => {
 
     it('debe restablecer todas las preferencias a los valores por defecto', async () => {
       prisma.usuario.findUnique.mockResolvedValue(mockUsuario);
-      prisma.preferenciaAccesibilidad.upsert.mockResolvedValue(
-        mockPreferencia,
-      );
+      prisma.preferenciaAccesibilidad.upsert.mockResolvedValue(mockPreferencia);
 
       const resultado = await service.restablecerPreferencias(mockUsuarioId);
 

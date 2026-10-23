@@ -1,4 +1,8 @@
-import { ArgumentMetadata, BadRequestException, ValidationPipe } from '@nestjs/common';
+import {
+  ArgumentMetadata,
+  BadRequestException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { EspaciadoTexto, PaletaColor, TamanoTexto } from '@prisma/client';
 import { UsuarioAutenticado } from '../common/interfaces/usuario-autenticado.interface.js';
@@ -104,10 +108,7 @@ describe('AccesibilidadController', () => {
         altoContraste: true,
       };
 
-      const respuesta = await controller.guardarPreferencias(
-        mockUsuario,
-        dto,
-      );
+      const respuesta = await controller.guardarPreferencias(mockUsuario, dto);
 
       expect(service.actualizarPreferencias).toHaveBeenCalledWith(
         mockUsuario.id,

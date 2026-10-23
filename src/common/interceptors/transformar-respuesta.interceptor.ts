@@ -9,9 +9,10 @@ import { map } from 'rxjs/operators';
 import { RespuestaExitosa } from '../interfaces/respuesta-api.interface.js';
 
 @Injectable()
-export class TransformarRespuestaInterceptor<T>
-  implements NestInterceptor<T, RespuestaExitosa<T>>
-{
+export class TransformarRespuestaInterceptor<T> implements NestInterceptor<
+  T,
+  RespuestaExitosa<T>
+> {
   intercept(
     context: ExecutionContext,
     next: CallHandler,

@@ -172,7 +172,9 @@ export class AuthService {
         secret: refreshSecret,
       });
     } catch {
-      throw new UnauthorizedException('El token de refresco es inválido o expiró');
+      throw new UnauthorizedException(
+        'El token de refresco es inválido o expiró',
+      );
     }
 
     // Validar token en la tabla de sesiones activas
@@ -302,7 +304,8 @@ export class AuthService {
       suscripcionActiva,
       pruebaGratuita: {
         preguntasConsumidas: suscripcionActiva?.preguntasGratisConsumidas ?? 0,
-        simuladoresConsumidos: suscripcionActiva?.simuladoresGratisConsumidos ?? 0,
+        simuladoresConsumidos:
+          suscripcionActiva?.simuladoresGratisConsumidos ?? 0,
       },
     };
   }

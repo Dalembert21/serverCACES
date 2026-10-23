@@ -46,7 +46,8 @@ describe('AuthService', () => {
         const config: Record<string, any> = {
           'auth.jwtSecret': 'super_secret_test_key_32_characters_minimum',
           'auth.jwtExpiresIn': '1d',
-          'auth.jwtRefreshSecret': 'super_refresh_test_key_32_characters_minimum',
+          'auth.jwtRefreshSecret':
+            'super_refresh_test_key_32_characters_minimum',
           'auth.jwtRefreshExpiresIn': '7d',
         };
         return config[key] ?? defaultValue;
@@ -71,7 +72,10 @@ describe('AuthService', () => {
 
   describe('registrar', () => {
     it('debe lanzar ConflictException si el correo ya existe', async () => {
-      prisma.usuario.findUnique.mockResolvedValue({ id: '1', correo: 'test@caces.ec' });
+      prisma.usuario.findUnique.mockResolvedValue({
+        id: '1',
+        correo: 'test@caces.ec',
+      });
 
       await expect(
         service.registrar({
@@ -84,7 +88,10 @@ describe('AuthService', () => {
 
     it('debe registrar un nuevo estudiante y generar tokens', async () => {
       prisma.usuario.findUnique.mockResolvedValue(null);
-      prisma.rol.findUnique.mockResolvedValue({ id: 'rol-1', nombre: RolNombre.ESTUDIANTE });
+      prisma.rol.findUnique.mockResolvedValue({
+        id: 'rol-1',
+        nombre: RolNombre.ESTUDIANTE,
+      });
       prisma.usuario.create.mockResolvedValue({
         id: 'usr-123',
         correo: 'nuevo@caces.ec',

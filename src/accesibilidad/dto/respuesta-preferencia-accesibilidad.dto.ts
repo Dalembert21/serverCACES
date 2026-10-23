@@ -28,8 +28,7 @@ export class RespuestaPreferenciaAccesibilidadDto {
   altoContraste: boolean;
 
   @ApiProperty({
-    description:
-      'Indica si la tipografía adaptada para dislexia está activada',
+    description: 'Indica si la tipografía adaptada para dislexia está activada',
     example: false,
   })
   fuenteDislexia: boolean;

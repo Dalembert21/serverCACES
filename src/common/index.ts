@@ -1,6 +1,7 @@
 export * from './dto/paginacion.dto.js';
 export * from './interfaces/respuesta-api.interface.js';
 export * from './interfaces/usuario-autenticado.interface.js';
+export * from './interfaces/almacenamiento.interface.js';
 export * from './interceptors/transformar-respuesta.interceptor.js';
 export * from './filters/excepcion-http.filter.js';
 export * from './decorators/usuario-actual.decorator.js';

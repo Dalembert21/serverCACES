@@ -79,7 +79,9 @@ async function bootstrap() {
 
   await app.listen(puerto);
   logger.log(`Servidor iniciado en puerto: ${puerto}`);
-  logger.log(`Documentación Swagger disponible en: http://localhost:${puerto}/${prefijo}/docs`);
+  logger.log(
+    `Documentación Swagger disponible en: http://localhost:${puerto}/${prefijo}/docs`,
+  );
 }
 
 bootstrap();
