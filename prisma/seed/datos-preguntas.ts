@@ -1,7 +1,6 @@
 import {
   DificultadPregunta,
   EstadoPregunta,
-  TipoPregunta,
 } from '@prisma/client';
 
 export function obtenerDatosPreguntas() {
@@ -14,7 +13,6 @@ export function obtenerDatosPreguntas() {
       explicacionPedagogica:
         'El cuadro corresponde a un Síndrome Coronario Agudo con elevación del segmento ST (SCACEST) de cara anterior. La prioridad absoluta es la terapia de reperfusión inmediata (angioplastia coronaria primaria o fibrinolisis si el tiempo de traslado a sala de hemodinamia supera los 120 minutos), junto con la administración inmediata de antiagregación plaquetaria dual y anticoagulación.',
       dificultad: DificultadPregunta.MEDIA,
-      tipo: TipoPregunta.CASO_CLINICO,
       estado: EstadoPregunta.PUBLICADA,
       referencia: {
         fuente: 'Guía ESC sobre el tratamiento del infarto agudo de miocardio',
@@ -58,8 +56,7 @@ export function obtenerDatosPreguntas() {
         'Lactante de 5 meses es llevado a consulta por tos, rinorrea y fiebre de bajo grado de 3 días de evolución, a lo que hoy se suma dificultad respiratoria. Al examen físico: taquipnea (FR 55 rpm), tiraje subcostal leve, sibilancias espiratorias bilaterales y subcrepitantes dispersos. Saturación de O2 al aire ambiente: 95%. Es su primer episodio de estas características. ¿Cuál es el diagnóstico más probable y el pilar terapéutico principal?',
       explicacionPedagogica:
         'Se trata de una Bronquiolitis aguda típica (primer episodio de sibilancias en menor de 2 años precedido de pródromo catarral). El pilar del tratamiento es de soporte: asegurar permeabilidad de la vía aérea, hidratación adecuada y oxigenoterapia únicamente si la saturación cae por debajo del 92%. Los broncodilatadores y corticoides no han demostrado beneficio sistemático.',
-      dificultad: DificultadPregunta.FACIL,
-      tipo: TipoPregunta.CASO_CLINICO,
+      dificultad: DificultadPregunta.BAJA,
       estado: EstadoPregunta.PUBLICADA,
       referencia: {
         fuente: 'Guía de Práctica Clínica de Bronquiolitis Aguda',
@@ -106,7 +103,6 @@ export function obtenerDatosPreguntas() {
       explicacionPedagogica:
         'El cuadro es patognomónico de osteítis alveolar (alveolitis seca o fibrinolítica), complicación post-exodoncia caracterizada por lisis prematura del coágulo, dolor neurálgico severo e irradiado y exposición de paredes óseas. El manejo consiste en irrigación suave con suero fisiológico tibio para retirar restos necróticos y colocación de una pasta sedante intraalveolar (ej. alvogyl/óxido de zinc eugenol) con analgesia sistémica.',
       dificultad: DificultadPregunta.MEDIA,
-      tipo: TipoPregunta.CASO_CLINICO,
       estado: EstadoPregunta.PUBLICADA,
       referencia: {
         fuente: 'Tratado de Cirugía Bucal',
@@ -152,8 +148,7 @@ export function obtenerDatosPreguntas() {
         'El médico prescribe una infusión de 500 ml de solución salina al 0.9% para pasar en 4 horas a través de un equipo de macrogoteo (factor de goteo: 20 gotas/ml). ¿A cuántas gotas por minuto debe calibrar el goteo el personal de enfermería?',
       explicacionPedagogica:
         'La fórmula estándar de cálculo de goteo con macrogotero es: Gotas por minuto = (Volumen total en ml * Factor de goteo) / (Tiempo en horas * 60 minutos). Gotas/min = (500 * 20) / (4 * 60) = 10,000 / 240 = 41.66 ≈ 42 gotas por minuto.',
-      dificultad: DificultadPregunta.FACIL,
-      tipo: TipoPregunta.OPCION_MULTIPLE,
+      dificultad: DificultadPregunta.BAJA,
       estado: EstadoPregunta.PUBLICADA,
       referencia: {
         fuente: 'Fundamentos de Enfermería',

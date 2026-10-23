@@ -9,7 +9,8 @@ export class ProgramasController {
 
   @Get()
   @ApiOperation({
-    summary: 'Listar programas académicos oficiales activos y sus parámetros de examen',
+    summary:
+      'Listar programas académicos oficiales activos y sus parámetros de examen',
     description:
       'Devuelve las carreras CACES disponibles con datos directos de la base de datos (duración límite, preguntas oficiales, puntaje de aprobación y áreas temáticas).',
   })

@@ -8,6 +8,7 @@ export const configuracionSchema = Joi.object({
   API_PREFIX: Joi.string().default('api/v1'),
 
   DATABASE_URL: Joi.string().required(),
+  DATABASE_SSL: Joi.boolean().default(false),
 
   JWT_SECRET: Joi.string().min(32).required(),
   JWT_EXPIRES_IN: Joi.string().default('1d'),

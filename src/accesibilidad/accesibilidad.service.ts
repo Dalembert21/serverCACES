@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EspaciadoTexto, PaletaColor, TamanoTexto } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
 import { ActualizarPreferenciaAccesibilidadDto } from './dto/index.js';

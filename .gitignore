@@ -17,12 +17,22 @@ lerna-debug.log*
 *.env
 !.env.example
 
-# Logs y bases de datos locales
+# Logs, volcados y bases de datos locales
 logs
 *.log
 *.sqlite
 *.sqlite3
 *.db
+*.dump
+*.bak
+
+# Certificados SSL y llaves criptográficas privadas
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
 
 # Pruebas y cobertura
 /coverage

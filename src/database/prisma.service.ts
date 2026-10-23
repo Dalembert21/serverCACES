@@ -23,7 +23,16 @@ export class PrismaService
       );
     }
 
-    const adapter = new PrismaPg({ connectionString: url });
+    const isSslEnabled =
+      configService.get<boolean>('database.ssl') ||
+      url.includes('sslmode=require') ||
+      url.includes('supabase.co') ||
+      url.includes('supabase.com');
+
+    const adapter = new PrismaPg({
+      connectionString: url,
+      ...(isSslEnabled ? { ssl: { rejectUnauthorized: false } } : {}),
+    });
     super({
       adapter,
       log:
