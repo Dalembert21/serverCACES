@@ -11,7 +11,20 @@ if (!connectionString) {
   throw new Error('DATABASE_URL no está definida para ejecutar el seed');
 }
 
-const adapter = new PrismaPg({ connectionString });
+const isSslEnabled =
+  process.env.DATABASE_SSL === 'true' ||
+  connectionString.includes('sslmode=require') ||
+  connectionString.includes('supabase.co') ||
+  connectionString.includes('supabase.com');
+
+const cleanConnectionString = isSslEnabled
+  ? connectionString.replace(/([?&])sslmode=[^&]+(&|$)/, '$1').replace(/[?&]$/, '')
+  : connectionString;
+
+const adapter = new PrismaPg({
+  connectionString: cleanConnectionString,
+  ...(isSslEnabled ? { ssl: { rejectUnauthorized: false } } : {}),
+});
 const prisma = new PrismaClient({ adapter });
 
 async function main() {

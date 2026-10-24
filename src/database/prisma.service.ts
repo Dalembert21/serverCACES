@@ -29,8 +29,13 @@ export class PrismaService
       url.includes('supabase.co') ||
       url.includes('supabase.com');
 
+    // Remover sslmode de la URL para que no sobreescriba ssl: { rejectUnauthorized: false }
+    const cleanUrl = isSslEnabled
+      ? url.replace(/([?&])sslmode=[^&]+(&|$)/, '$1').replace(/[?&]$/, '')
+      : url;
+
     const adapter = new PrismaPg({
-      connectionString: url,
+      connectionString: cleanUrl,
       ...(isSslEnabled ? { ssl: { rejectUnauthorized: false } } : {}),
     });
     super({
