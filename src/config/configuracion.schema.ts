@@ -22,4 +22,9 @@ export const configuracionSchema = Joi.object({
 
   TRIAL_MAX_PREGUNTAS: Joi.number().default(30),
   TRIAL_MAX_SIMULADORES: Joi.number().default(1),
-});
+
+  // Supabase API & Storage (opcional para integraciones directas)
+  SUPABASE_URL: Joi.string().uri().optional(),
+  SUPABASE_ANON_KEY: Joi.string().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: Joi.string().optional(),
+}).unknown(true);
