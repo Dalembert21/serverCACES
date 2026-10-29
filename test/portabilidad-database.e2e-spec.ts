@@ -25,8 +25,8 @@ describe('Portabilidad de Base de Datos y Arquitectura Desacoplada (E2E)', () =>
     const databaseUrl = configService.get<string>('DATABASE_URL');
     expect(databaseUrl).toBeDefined();
     expect(
-      databaseUrl.startsWith('postgresql://') ||
-        databaseUrl.startsWith('postgres://'),
+      databaseUrl?.startsWith('postgresql://') ||
+        databaseUrl?.startsWith('postgres://'),
     ).toBe(true);
   });
 

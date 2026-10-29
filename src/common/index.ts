@@ -7,3 +7,4 @@ export * from './filters/excepcion-http.filter.js';
 export * from './decorators/usuario-actual.decorator.js';
 export * from './decorators/roles.decorator.js';
 export * from './guards/roles.guard.js';
+export * from './validators/cedula-ecuatoriana.validator.js';

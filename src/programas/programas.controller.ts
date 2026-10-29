@@ -1,4 +1,4 @@
-﻿import { Controller, Get, Param } from '@nestjs/common';
+import { Controller, Get, Param } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { ProgramasService } from './programas.service.js';
 
@@ -36,5 +36,19 @@ export class ProgramasController {
   })
   async obtenerPrograma(@Param('id') id: string) {
     return this.programasService.obtenerProgramaPorId(id);
+  }
+
+  @Get(':id/estructura')
+  @ApiOperation({
+    summary: 'Consultar árbol completo de áreas y subáreas de un programa CACES',
+    description:
+      'Devuelve la jerarquía académica completa (Programa -> Áreas -> Subáreas/Competencias).',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Árbol académico obtenido correctamente.',
+  })
+  async obtenerEstructura(@Param('id') id: string) {
+    return this.programasService.obtenerEstructuraPrograma(id);
   }
 }

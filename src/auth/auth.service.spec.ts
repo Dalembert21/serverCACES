@@ -1,4 +1,8 @@
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -17,7 +21,9 @@ describe('AuthService', () => {
     prisma = {
       usuario: {
         findUnique: jest.fn(),
+        findFirst: jest.fn((args) => prisma.usuario.findUnique(args)),
         create: jest.fn(),
+        update: jest.fn(),
       },
       rol: {
         findUnique: jest.fn(),
@@ -86,7 +92,7 @@ describe('AuthService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('debe registrar un nuevo estudiante y generar tokens', async () => {
+    it('debe registrar un nuevo estudiante y generar tokens con clave segura', async () => {
       prisma.usuario.findUnique.mockResolvedValue(null);
       prisma.rol.findUnique.mockResolvedValue({
         id: 'rol-1',
@@ -161,6 +167,181 @@ describe('AuthService', () => {
       expect(resultado).toHaveProperty('tokens');
       expect(resultado.usuario.id).toBe('usr-1');
       expect(resultado.usuario.roles).toContain(RolNombre.ESTUDIANTE);
+    });
+  });
+
+  describe('completarPerfil', () => {
+    it('debe lanzar BadRequestException si la cédula es una secuencia repetitiva incoherente como 2222222222', async () => {
+      await expect(
+        service.completarPerfil('mi-usuario-id', {
+          cedula: '2222222222',
+          programaActivoId: 'prog-medicina',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe lanzar BadRequestException si la cédula pertenece a otro usuario', async () => {
+      prisma.usuario.findUnique.mockResolvedValue({
+        id: 'otro-usuario-id',
+        cedula: '1710034065',
+      });
+
+      let error: any;
+      try {
+        await service.completarPerfil('mi-usuario-id', {
+          cedula: '1710034065',
+          programaActivoId: 'prog-medicina',
+        });
+      } catch (e) {
+        error = e;
+      }
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect(error.message).toContain('cédula');
+    });
+
+    it('debe actualizar cédula y carrera correctamente con cédula válida', async () => {
+      prisma.usuario.findUnique.mockResolvedValue(null);
+      prisma.usuario.update.mockResolvedValue({
+        id: 'mi-usuario-id',
+        cedula: '1710034065',
+        nombre: 'Carlos',
+        apellido: 'Morales',
+        nombreCompleto: 'Carlos Morales',
+        correo: 'carlos@gmail.com',
+        rol: 'estudiante',
+        programaActivoId: 'prog-medicina',
+        creadoEn: new Date('2026-10-24T05:00:00.000Z'),
+        roles: [{ rol: { nombre: RolNombre.ESTUDIANTE } }],
+      });
+
+      const resultado = await service.completarPerfil('mi-usuario-id', {
+        cedula: '1710034065',
+        programaActivoId: 'prog-medicina',
+      });
+
+      expect(resultado.cedula).toBe('1710034065');
+      expect(resultado.programaActivoId).toBe('prog-medicina');
+      expect(resultado.usuario.cedula).toBe('1710034065');
+      expect(resultado).toHaveProperty('tokenAcceso');
+    });
+  });
+
+  describe('validaciones de coherencia y seguridad en registro', () => {
+    it('debe rechazar registro con cédula repetitiva como 2222222222', async () => {
+      await expect(
+        service.registrar({
+          correo: 'test@caces.ec',
+          clave: 'Password123!',
+          cedula: '2222222222',
+          nombre: 'Carlos',
+          apellido: 'Morales',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe rechazar registro con nombre que solo contiene puntos ...', async () => {
+      await expect(
+        service.registrar({
+          correo: 'test2@caces.ec',
+          clave: 'Password123!',
+          cedula: '1710034065',
+          nombre: '...',
+          apellido: 'Morales',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe rechazar registro con contraseña compuesta únicamente por puntos ....... o ........', async () => {
+      await expect(
+        service.registrar({
+          correo: 'test3@caces.ec',
+          clave: '.......',
+          cedula: '1710034065',
+          nombre: 'Carlos',
+          apellido: 'Morales',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.registrar({
+          correo: 'test3b@caces.ec',
+          clave: '........',
+          cedula: '1710034065',
+          nombre: 'Carlos',
+          apellido: 'Morales',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe rechazar registro con contraseña de asteriscos *******', async () => {
+      await expect(
+        service.registrar({
+          correo: 'testasterisco@caces.ec',
+          clave: '********',
+          cedula: '1710034065',
+          nombre: 'Carlos',
+          apellido: 'Morales',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe rechazar registro con contraseña de caracteres repetidos como aaaaaaaa o 11111111', async () => {
+      await expect(
+        service.registrar({
+          correo: 'test4@caces.ec',
+          clave: 'aaaaaaaa',
+          cedula: '1710034065',
+          nombre: 'Carlos',
+          apellido: 'Morales',
+        }),
+      ).rejects.toThrow(BadRequestException);
+
+      await expect(
+        service.registrar({
+          correo: 'test4b@caces.ec',
+          clave: '11111111',
+          cedula: '1710034065',
+          nombre: 'Carlos',
+          apellido: 'Morales',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe rechazar registro si la contraseña no incluye letras (ej. solo números 12345678)', async () => {
+      await expect(
+        service.registrar({
+          correo: 'test5@caces.ec',
+          clave: '12345678',
+          cedula: '1710034065',
+          nombre: 'Carlos',
+          apellido: 'Morales',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe rechazar registro si la contraseña no incluye números (ej. solo letras abcdefgh)', async () => {
+      await expect(
+        service.registrar({
+          correo: 'test6@caces.ec',
+          clave: 'abcdefgh',
+          cedula: '1710034065',
+          nombre: 'Carlos',
+          apellido: 'Morales',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('debe rechazar registro si la contraseña tiene menos de 8 caracteres', async () => {
+      await expect(
+        service.registrar({
+          correo: 'test7@caces.ec',
+          clave: 'Clav1',
+          cedula: '1710034065',
+          nombre: 'Carlos',
+          apellido: 'Morales',
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

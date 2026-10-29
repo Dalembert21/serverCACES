@@ -48,14 +48,13 @@ export class ProgramasService {
         ),
       }));
 
-      const codigoLower = (prog.codigoOficialCaces || prog.id).toLowerCase();
-      const idFrontend = codigoLower.startsWith('caces-')
-        ? codigoLower
-        : `prog-${codigoLower}`;
+      const baseId = (prog.id || '').toLowerCase().replace('caces-', '').replace('prog-', '');
+      const idFrontend = `prog-${baseId}`;
+      const codigoCaces = `caces-${baseId}`;
 
       return {
         id: idFrontend,
-        codigo: `caces-${codigoLower}`,
+        codigo: codigoCaces,
         titulo: `CACES — ${prog.nombre}`,
         subtitulo: 'Examen de Habilitación para el Ejercicio Profesional',
         descripcion:
@@ -82,5 +81,60 @@ export class ProgramasService {
       throw new NotFoundException(`Programa con id ${id} no encontrado`);
     }
     return encontrado;
+  }
+
+  async obtenerEstructuraPrograma(id: string) {
+    const progLimpio = id.trim();
+    const programa = await this.prisma.programaAcademico.findFirst({
+      where: {
+        activo: true,
+        OR: [
+          { id: progLimpio },
+          { id: progLimpio.toUpperCase() },
+          { id: `caces-${progLimpio.toLowerCase().replace('prog-', '')}` },
+          { codigoOficialCaces: progLimpio },
+        ],
+      },
+      include: {
+        versionesTemarios: {
+          where: { activo: true },
+          include: {
+            areas: {
+              include: {
+                subareasCompetencias: true,
+              },
+              orderBy: { nombre: 'asc' },
+            },
+          },
+          orderBy: { fechaInicioVigencia: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!programa) {
+      throw new NotFoundException(`Programa con identificador ${id} no encontrado`);
+    }
+
+    const temario = programa.versionesTemarios[0];
+    const areas = (temario?.areas || []).map((area) => ({
+      id: area.id,
+      nombre: area.nombre,
+      pesoPorcentual: area.pesoPorcentual,
+      subareas: area.subareasCompetencias.map((sub) => ({
+        id: sub.id,
+        codigoOficial: sub.codigoOficial,
+        nombre: sub.nombre,
+        descripcion: sub.descripcion,
+      })),
+    }));
+
+    return {
+      programaId: programa.id,
+      nombrePrograma: programa.nombre,
+      codigoOficialCaces: programa.codigoOficialCaces,
+      totalAreas: areas.length,
+      areas,
+    };
   }
 }

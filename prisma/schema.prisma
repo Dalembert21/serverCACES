@@ -11,24 +11,28 @@ generator client {
 // ============================================================================
 
 enum RolNombre {
-  ADMIN
+  SUPERADMIN
+  TESORERIA
   ESTUDIANTE
-  REVISOR_ACADEMICO
-  TUTOR
 }
 
 model Usuario {
   id                   String   @id @default(uuid()) @map("USUARIO_ID")
   tipoIdentificacion   String   @default("CEDULA") @map("TIPO_IDENTIFICACION")
-  numeroIdentificacion String?  @unique @map("NUMERO_IDENTIFICACION")
-  nombres              String?  @map("NOMBRES")
-  apellidos            String?  @map("APELLIDOS")
-  nombreCompleto       String   @map("NOMBRE_COMPLETO")
+  cedula               String?  @unique @map("NUMERO_IDENTIFICACION")
+  nombre               String?  @map("NOMBRES")
+  apellido             String?  @map("APELLIDOS")
+  nombreCompleto       String   @default("Estudiante") @map("NOMBRE_COMPLETO")
   correo               String   @unique @map("CORREO_ELECTRONICO")
-  contrasenaHash       String   @map("CONTRASENA_ENCRIPTADA")
+  contrasenaHash       String?  @map("CONTRASENA_ENCRIPTADA")
   telefonoContacto     String?  @map("TELEFONO_CONTACTO")
   activo               Boolean  @default(true) @map("ESTADO_CUENTA_ACTIVA")
   correoVerificado     Boolean  @default(false) @map("CORREO_CONFIRMADO")
+  rol                  String   @default("estudiante") @map("ROL")
+  programaActivoId     String?  @map("PROGRAMA_ACTIVO_ID")
+  googleId             String?  @unique @map("GOOGLE_ID")
+  fotoUrl              String?  @map("FOTO_URL")
+  proveedorAuth        String   @default("local") @map("PROVEEDOR_AUTH")
   creadoEn             DateTime @default(now()) @map("FECHA_REGISTRO")
   actualizadoEn        DateTime @updatedAt @map("FECHA_ACTUALIZACION")
 
@@ -44,10 +48,48 @@ model Usuario {
   transacciones             TransaccionPago[]             @relation("TransaccionesPagador")
   transaccionesAprobadas    TransaccionPago[]             @relation("TransaccionesAdminAprobador")
   preferenciaAccesibilidad  PreferenciaAccesibilidad?
+  perfilTrabajador          PerfilTrabajador?
+  preguntasFavoritas        PreguntaFavorita[]
+  notasPreguntas            NotaEstudiantePregunta[]
   auditoriasOperaciones     AuditoriaOperacionSistema[]
   auditoriasAccesos         AuditoriaAccesoSeguridad[]
 
   @@map("USUARIOS")
+}
+
+model PerfilTrabajador {
+  id              String        @id @default(uuid()) @map("PERFIL_TRABAJADOR_ID")
+  usuarioId       String        @unique @map("USUARIO_ID")
+  cargo           String        @map("CARGO")
+  departamentoId  String?       @map("DEPARTAMENTO_ID")
+  departamento    String?       @map("DEPARTAMENTO")
+  telefonoOficina String?       @map("TELEFONO_OFICINA")
+  fechaIngreso    DateTime      @default(now()) @map("FECHA_INGRESO")
+  activo          Boolean       @default(true) @map("ESTADO_ACTIVO")
+  observaciones   String?       @db.Text @map("OBSERVACIONES")
+  creadoEn        DateTime      @default(now()) @map("FECHA_CREACION")
+  actualizadoEn   DateTime      @updatedAt @map("FECHA_ACTUALIZACION")
+
+  usuario         Usuario       @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  departamentoRel Departamento? @relation(fields: [departamentoId], references: [id], onDelete: SetNull)
+
+  @@index([cargo])
+  @@index([departamento])
+  @@index([departamentoId])
+  @@map("PERFILES_TRABAJADORES")
+}
+
+model Departamento {
+  id            String             @id @default(uuid()) @map("DEPARTAMENTO_ID")
+  nombre        String             @unique @map("NOMBRE_DEPARTAMENTO")
+  descripcion   String?            @map("DESCRIPCION_DEPARTAMENTO")
+  activo        Boolean            @default(true) @map("ESTADO_ACTIVO")
+  creadoEn      DateTime           @default(now()) @map("FECHA_CREACION")
+  actualizadoEn DateTime           @updatedAt @map("FECHA_ACTUALIZACION")
+
+  trabajadores  PerfilTrabajador[]
+
+  @@map("DEPARTAMENTOS")
 }
 
 model Rol {
@@ -217,6 +259,8 @@ model Pregunta {
   casoClinico CasoClinico?       @relation(fields: [casoClinicoId], references: [id], onDelete: SetNull)
   creador     Usuario            @relation("PreguntaCreador", fields: [creadorId], references: [id], onDelete: Restrict)
   versiones   PreguntaVersion[]
+  favoritos   PreguntaFavorita[]
+  notasEstudiantes NotaEstudiantePregunta[]
 
   @@map("PREGUNTAS")
 }
@@ -297,6 +341,11 @@ enum TipoSimulador {
   PRACTICA_PERSONALIZADA
 }
 
+enum ModoRetroalimentacion {
+  AL_FINALIZAR
+  INMEDIATA
+}
+
 enum EstadoIntento {
   EN_PROGRESO
   FINALIZADO_USUARIO
@@ -321,21 +370,25 @@ model ConfiguracionSimulador {
 }
 
 model IntentoEvaluacion {
-  id                       String        @id @default(uuid()) @map("INTENTO_EVALUACION_ID")
-  usuarioId                String        @map("USUARIO_ID")
-  configuracionSimuladorId String        @map("CONFIGURACION_SIMULADOR_ID")
-  estado                   EstadoIntento @default(EN_PROGRESO) @map("ESTADO_INTENTO")
-  fechaInicio              DateTime      @default(now()) @map("FECHA_HORA_INICIO")
-  fechaFinalizacion        DateTime?     @map("FECHA_HORA_FINALIZACION")
-  tiempoConsumidoSegundos  Int           @default(0) @map("TIEMPO_CONSUMIDO_SEGUNDOS")
-  creadoEn                 DateTime      @default(now()) @map("FECHA_CREACION")
+  id                       String                 @id @default(uuid()) @map("INTENTO_EVALUACION_ID")
+  usuarioId                String                 @map("USUARIO_ID")
+  configuracionSimuladorId String?                @map("CONFIGURACION_SIMULADOR_ID")
+  modalidad                TipoSimulador          @default(SIMULACRO_OFICIAL) @map("MODALIDAD_INTENTO")
+  modoRetroalimentacion    ModoRetroalimentacion  @default(AL_FINALIZAR) @map("MODO_RETROALIMENTACION")
+  filtrosPersonalizados    Json?                  @map("FILTROS_PERSONALIZADOS_JSON")
+  estado                   EstadoIntento          @default(EN_PROGRESO) @map("ESTADO_INTENTO")
+  fechaInicio              DateTime               @default(now()) @map("FECHA_HORA_INICIO")
+  fechaFinalizacion        DateTime?              @map("FECHA_HORA_FINALIZACION")
+  tiempoConsumidoSegundos  Int                    @default(0) @map("TIEMPO_CONSUMIDO_SEGUNDOS")
+  creadoEn                 DateTime               @default(now()) @map("FECHA_CREACION")
 
   usuario                Usuario                      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  configuracionSimulador ConfiguracionSimulador       @relation(fields: [configuracionSimuladorId], references: [id], onDelete: Restrict)
+  configuracionSimulador ConfiguracionSimulador?      @relation(fields: [configuracionSimuladorId], references: [id], onDelete: SetNull)
   respuestas             RespuestaIntentoEvaluacion[]
   resultado              ResultadoIntentoConsolidado?
 
   @@index([usuarioId, estado])
+  @@index([modalidad])
   @@map("INTENTOS_EVALUACIONES")
 }
 
@@ -572,4 +625,39 @@ model PreferenciaAccesibilidad {
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@map("PREFERENCIAS_ACCESIBILIDAD")
+}
+
+// ============================================================================
+// 9. BANCO PERSONAL, FAVORITOS Y NOTAS DEL ESTUDIANTE
+// ============================================================================
+
+model PreguntaFavorita {
+  id         String   @id @default(uuid()) @map("PREGUNTA_FAVORITA_ID")
+  usuarioId  String   @map("USUARIO_ID")
+  preguntaId String   @map("PREGUNTA_ID")
+  carpeta    String   @default("GENERAL") @map("CARPETA_CLASIFICACION")
+  creadoEn   DateTime @default(now()) @map("FECHA_GUARDADO")
+
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  pregunta Pregunta @relation(fields: [preguntaId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, preguntaId])
+  @@index([usuarioId])
+  @@map("PREGUNTAS_FAVORITAS")
+}
+
+model NotaEstudiantePregunta {
+  id            String   @id @default(uuid()) @map("NOTA_ESTUDIANTE_ID")
+  usuarioId     String   @map("USUARIO_ID")
+  preguntaId    String   @map("PREGUNTA_ID")
+  contenidoNota String   @db.Text @map("CONTENIDO_NOTA")
+  creadoEn      DateTime @default(now()) @map("FECHA_CREACION")
+  actualizadoEn DateTime @updatedAt @map("FECHA_ACTUALIZACION")
+
+  usuario  Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  pregunta Pregunta @relation(fields: [preguntaId], references: [id], onDelete: Cascade)
+
+  @@unique([usuarioId, preguntaId])
+  @@index([usuarioId])
+  @@map("NOTAS_ESTUDIANTE_PREGUNTAS")
 }
