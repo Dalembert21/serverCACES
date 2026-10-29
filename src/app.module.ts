@@ -1,4 +1,4 @@
-﻿import { Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -12,6 +12,10 @@ import { PrismaModule } from './database/index.js';
 import { AuthModule } from './auth/index.js';
 import { AccesibilidadModule } from './accesibilidad/index.js';
 import { ProgramasModule } from './programas/index.js';
+import { PracticaModule } from './practica/index.js';
+import { SimuladoresModule } from './simuladores/index.js';
+import { SuscripcionesModule } from './suscripciones/index.js';
+import { AdminModule } from './admin/index.js';
 import { AppController } from './app.controller.js';
 import { AppService } from './app.service.js';
 
@@ -39,6 +43,10 @@ import { AppService } from './app.service.js';
     AuthModule,
     AccesibilidadModule,
     ProgramasModule,
+    PracticaModule,
+    SimuladoresModule,
+    SuscripcionesModule,
+    AdminModule,
   ],
   controllers: [AppController],
   providers: [

@@ -38,6 +38,34 @@ export class ExcepcionHttpFilter implements ExceptionFilter {
         detalles = respuestaObj.message || respuestaObj;
         codigoError = (respuestaObj.error as string) || `HTTP_${status}`;
       }
+    } else if (
+      typeof exception === 'object' &&
+      exception !== null &&
+      'code' in exception &&
+      (exception as any).code === 'P2002'
+    ) {
+      status = HttpStatus.CONFLICT;
+      const target = (exception as any).meta?.target;
+      const targetStr = (
+        Array.isArray(target) ? target.join(', ') : String(target || '')
+      ).toLowerCase();
+
+      if (targetStr.includes('correo')) {
+        mensaje =
+          'El correo electrónico ya se encuentra registrado en la plataforma. Por favor, utiliza otro correo o inicia sesión.';
+        codigoError = 'CORREO_DUPLICADO';
+      } else if (
+        targetStr.includes('identificacion') ||
+        targetStr.includes('cedula')
+      ) {
+        mensaje =
+          'El número de identificación (cédula) ya se encuentra registrado en el sistema.';
+        codigoError = 'CEDULA_DUPLICADA';
+      } else {
+        mensaje =
+          'Ya existe un registro con los mismos datos únicos en el sistema.';
+        codigoError = 'REGISTRO_DUPLICADO';
+      }
     } else if (exception instanceof Error) {
       this.logger.error(
         `Error no controlado [${request.method} ${request.url}]: ${exception.message}`,

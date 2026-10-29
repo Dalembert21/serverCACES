@@ -31,7 +31,13 @@ export class RolesGuard implements CanActivate {
       );
     }
 
-    const tieneRol = rolesRequeridos.some((rol) => usuario.roles.includes(rol));
+    const rolesUsuarioMayusculas = usuario.roles.map((r) =>
+      typeof r === 'string' ? r.toUpperCase() : String(r),
+    );
+
+    const tieneRol = rolesRequeridos.some((rol) =>
+      rolesUsuarioMayusculas.includes(rol.toUpperCase()),
+    );
 
     if (!tieneRol) {
       throw new ForbiddenException(

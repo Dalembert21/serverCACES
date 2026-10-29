@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, RolNombre } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { obtenerDatosSeguridad } from './datos-seguridad.js';
 import { obtenerDatosComerciales } from './datos-comerciales.js';
@@ -45,15 +45,25 @@ async function main() {
     });
   }
 
-  // 2. Planes Comerciales
-  console.log('2. Sembrando planes comerciales...');
-  const { planes } = obtenerDatosComerciales();
+  // 2. Planes Comerciales y Departamentos Institucionales
+  console.log('2. Sembrando planes comerciales y departamentos...');
+  const { planes, departamentos } = obtenerDatosComerciales();
   for (const plan of planes) {
     await prisma.planSuscripcion.upsert({
       where: { id: plan.id },
       update: plan,
       create: plan,
     });
+  }
+
+  const departamentosCreados: Record<string, string> = {};
+  for (const dep of departamentos) {
+    const d = await prisma.departamento.upsert({
+      where: { nombre: dep.nombre },
+      update: dep,
+      create: dep,
+    });
+    departamentosCreados[dep.nombre] = d.id;
   }
 
   console.log('3. Sembrando usuarios del sistema...');
@@ -68,12 +78,14 @@ async function main() {
       update: {
         nombreCompleto: usr.nombreCompleto,
         contrasenaHash: usr.contrasenaHash,
+        rol: usr.rol.toLowerCase(),
       },
       create: {
         correo: usr.correo,
         nombreCompleto: usr.nombreCompleto,
         contrasenaHash: usr.contrasenaHash,
         correoVerificado: usr.correoVerificado,
+        rol: usr.rol.toLowerCase(),
       },
     });
 
@@ -93,8 +105,34 @@ async function main() {
       },
     });
 
+    // Perfil de trabajador para roles administrativos / de staff
+    if (usr.rol === RolNombre.SUPERADMIN || usr.rol === RolNombre.TESORERIA) {
+      const nombreDepto =
+        usr.rol === RolNombre.SUPERADMIN
+          ? 'Dirección General y TI'
+          : 'Tesorería';
+      const deptoId = departamentosCreados[nombreDepto] || null;
+
+      await prisma.perfilTrabajador.upsert({
+        where: { usuarioId: usuarioDb.id },
+        update: {
+          cargo: usr.rol === RolNombre.SUPERADMIN ? 'Superadministrador' : 'Gestor de Tesorería',
+          departamento: nombreDepto,
+          departamentoId: deptoId,
+          activo: true,
+        },
+        create: {
+          usuarioId: usuarioDb.id,
+          cargo: usr.rol === RolNombre.SUPERADMIN ? 'Superadministrador' : 'Gestor de Tesorería',
+          departamento: nombreDepto,
+          departamentoId: deptoId,
+          activo: true,
+        },
+      });
+    }
+
     // Suscripción base para estudiantes demo
-    if (usr.rol === 'ESTUDIANTE') {
+    if (usr.rol === RolNombre.ESTUDIANTE) {
       const expiraEn = new Date();
       expiraEn.setDate(expiraEn.getDate() + 365);
 
@@ -238,8 +276,25 @@ async function main() {
     ...preguntasEnfermeria,
   ];
 
-  const adminId = usuariosCreados['admin@caces-prep.ec'];
-  const revisorId = usuariosCreados['revisor.academico@caces-prep.ec'];
+  const adminUsuarioDb =
+    (await prisma.usuario.findFirst({
+      where: {
+        OR: [
+          { rol: 'superadmin' },
+          { roles: { some: { rol: { nombre: RolNombre.SUPERADMIN } } } },
+        ],
+      },
+    })) || (await prisma.usuario.findFirst());
+
+  if (!adminUsuarioDb) {
+    console.warn(
+      '⚠️ No se encontró ningún usuario en la base de datos para asignar autoría a las preguntas. Omite si aún no se han creado usuarios.',
+    );
+    return;
+  }
+
+  const adminId = adminUsuarioDb.id;
+  const revisorId = adminId;
 
   for (const item of todasLasPreguntas) {
     const subareaCompetenciaId = subareasMap[item.temaNombre];

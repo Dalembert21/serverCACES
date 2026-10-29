@@ -38,7 +38,7 @@ A diferencia de sistemas acoplados a Supabase Auth (`auth.users`):
 - La identidad se gestiona directamente en las tablas del esquema público: `USUARIOS`, `ROLES`, `USUARIOS_ROLES`, `SESIONES_AUTENTICACION` y `TOKENS_RECUPERACION`.
 - **Encriptación**: Las contraseñas se almacenan con hash irreversible usando `bcryptjs`.
 - **Tokens**: Autenticación desacoplada basada en JWT (`@nestjs/jwt` y `passport-jwt`) con tokens de acceso y tokens de refresco persistidos y revocables.
-- **RBAC**: Control de acceso basado en roles (`ADMIN`, `ESTUDIANTE`, `REVISOR_ACADEMICO`, `TUTOR`).
+- **RBAC**: Control de acceso basado en roles (`SUPERADMIN`, `TESORERIA`, `ESTUDIANTE`).
 - **Migración transparente**: Al migrar la base de datos, los usuarios, credenciales, sesiones e historial se transfieren íntegramente con un simple volcado SQL (`pg_dump`), sin depender de exportadores externos de identidad.
 
 ---

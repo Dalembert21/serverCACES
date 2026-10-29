@@ -10,7 +10,15 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { RolNombre } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { OAuth2Client } from 'google-auth-library';
 import { PrismaService } from '../database/prisma.service.js';
+import {
+  validarCedulaEcuatoriana,
+  validarClaveSegura,
+  validarNombrePersona,
+} from '../common/index.js';
+import { CompletarPerfilDto } from './dto/completar-perfil.dto.js';
+import { GoogleAuthDto } from './dto/google-auth.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { RegistroDto } from './dto/registro.dto.js';
 import { RenovarTokenDto } from './dto/renovar-token.dto.js';
@@ -29,18 +37,73 @@ export class AuthService {
    * Registro público de nuevos estudiantes
    */
   async registrar(dto: RegistroDto) {
-    const usuarioExistente = await this.prisma.usuario.findUnique({
-      where: { correo: dto.correo },
+    const correo = dto.correo.toLowerCase().trim();
+
+    // Validación rigurosa de cédula ecuatoriana si es provista
+    if (dto.cedula) {
+      const valCedula = validarCedulaEcuatoriana(dto.cedula);
+      if (!valCedula.esValida) {
+        throw new BadRequestException(
+          valCedula.motivo || 'La cédula de identidad no es válida',
+        );
+      }
+    }
+
+    // Validación de nombres y apellidos (evitar puntos, símbolos o valores incoherentes)
+    if (dto.nombre) {
+      const valNombre = validarNombrePersona(dto.nombre);
+      if (!valNombre.esValido) {
+        throw new BadRequestException(
+          valNombre.motivo || 'El nombre ingresado no es válido',
+        );
+      }
+    }
+
+    if (dto.apellido) {
+      const valApellido = validarNombrePersona(dto.apellido);
+      if (!valApellido.esValido) {
+        throw new BadRequestException(
+          valApellido.motivo || 'El apellido ingresado no es válido',
+        );
+      }
+    }
+
+    const usuarioExistente = await this.prisma.usuario.findFirst({
+      where: {
+        OR: [
+          { correo: { equals: correo, mode: 'insensitive' } },
+          ...(dto.cedula ? [{ cedula: dto.cedula.trim() }] : []),
+        ],
+      },
     });
 
     if (usuarioExistente) {
+      const coincideCorreo =
+        usuarioExistente.correo.toLowerCase().trim() === correo;
+      if (coincideCorreo) {
+        throw new ConflictException(
+          'El correo electrónico ya se encuentra registrado. Por favor, inicia sesión con tus credenciales o solicita la recuperación de tu contraseña.',
+        );
+      }
       throw new ConflictException(
-        'El correo electrónico ya se encuentra registrado',
+        'El número de cédula de identidad ya se encuentra registrado en el sistema.',
+      );
+    }
+
+    const passwordPlano = dto.contrasena || dto.clave;
+    if (!passwordPlano) {
+      throw new BadRequestException('Debe ingresar una contraseña');
+    }
+
+    const valClave = validarClaveSegura(passwordPlano);
+    if (!valClave.esValida) {
+      throw new BadRequestException(
+        valClave.motivo || 'La contraseña no cumple con los requisitos de seguridad',
       );
     }
 
     const salt = await bcrypt.genSalt(10);
-    const contrasenaHash = await bcrypt.hash(dto.contrasena, salt);
+    const contrasenaHash = await bcrypt.hash(passwordPlano, salt);
 
     // Obtener o asegurar rol ESTUDIANTE
     const rolEstudiante = await this.prisma.rol.findUnique({
@@ -53,13 +116,24 @@ export class AuthService {
       );
     }
 
+    const nombreCompleto =
+      dto.nombreCompleto?.trim() ||
+      [dto.nombre?.trim(), dto.apellido?.trim()].filter(Boolean).join(' ') ||
+      'Estudiante CACES';
+
     // Creación transaccional: Usuario + Asignación de Rol + Suscripción Inicial Gratuita
     const nuevoUsuario = await this.prisma.$transaction(async (tx) => {
       const usuario = await tx.usuario.create({
         data: {
-          correo: dto.correo,
-          nombreCompleto: dto.nombreCompleto,
+          correo,
+          cedula: dto.cedula?.trim() || null,
+          nombre: dto.nombre?.trim() || null,
+          apellido: dto.apellido?.trim() || null,
+          nombreCompleto,
           contrasenaHash,
+          rol: 'estudiante',
+          programaActivoId: dto.programaInicialId || 'prog-medicina',
+          proveedorAuth: 'local',
           correoVerificado: false,
         },
       });
@@ -97,23 +171,53 @@ export class AuthService {
       roles,
     );
 
+    const nombresDivididos = nuevoUsuario.nombreCompleto.split(' ');
+    const primerNombre = nuevoUsuario.nombre || nombresDivididos[0] || 'Estudiante';
+    const apellidos = nuevoUsuario.apellido || nombresDivididos.slice(1).join(' ') || '';
+
+    const usuarioFormateado = {
+      id: nuevoUsuario.id,
+      cedula: nuevoUsuario.cedula || undefined,
+      nombre: primerNombre,
+      apellido: apellidos,
+      nombreCompleto: nuevoUsuario.nombreCompleto,
+      correo: nuevoUsuario.correo,
+      rol: 'estudiante',
+      roles,
+      programaActivoId: nuevoUsuario.programaActivoId || dto.programaInicialId || 'prog-medicina',
+      fechaRegistro: (nuevoUsuario.creadoEn || new Date()).toISOString(),
+    };
+
     return {
-      usuario: {
-        id: nuevoUsuario.id,
-        correo: nuevoUsuario.correo,
-        nombreCompleto: nuevoUsuario.nombreCompleto,
-        roles,
-      },
+      usuario: usuarioFormateado,
       tokens,
+      tokenAcceso: tokens.accessToken,
+      tokenRefresco: tokens.refreshToken,
     };
   }
 
   /**
-   * Inicio de sesión de usuarios existentes
+   * Inicio de sesión de usuarios existentes (por correo o cédula)
    */
   async iniciarSesion(dto: LoginDto) {
-    const usuario = await this.prisma.usuario.findUnique({
-      where: { correo: dto.correo },
+    const identificador = (dto.identificador || dto.correo || '').trim();
+    const passwordPlano = dto.contrasena || dto.clave;
+
+    if (!identificador) {
+      throw new BadRequestException('Debe ingresar su correo o cédula');
+    }
+
+    if (!passwordPlano) {
+      throw new BadRequestException('Debe ingresar su contraseña');
+    }
+
+    const usuario = await this.prisma.usuario.findFirst({
+      where: {
+        OR: [
+          { correo: identificador.toLowerCase() },
+          { cedula: identificador },
+        ],
+      },
       include: {
         roles: {
           include: {
@@ -131,8 +235,14 @@ export class AuthService {
       throw new UnauthorizedException('La cuenta se encuentra desactivada');
     }
 
+    if (!usuario.contrasenaHash) {
+      throw new UnauthorizedException(
+        'Esta cuenta fue registrada mediante Google. Por favor, inicia sesión con el botón de Google.',
+      );
+    }
+
     const contrasenaValida = await bcrypt.compare(
-      dto.contrasena,
+      passwordPlano,
       usuario.contrasenaHash,
     );
 
@@ -147,14 +257,31 @@ export class AuthService {
       roles,
     );
 
+    const esAdmin = roles.includes(RolNombre.SUPERADMIN) || roles.includes(RolNombre.TESORERIA);
+    const rolFront = esAdmin ? 'administrador_academico' : (usuario.rol || 'estudiante');
+
+    const nombresDivididos = usuario.nombreCompleto.split(' ');
+    const primerNombre = usuario.nombre || nombresDivididos[0] || 'Usuario';
+    const apellidos = usuario.apellido || nombresDivididos.slice(1).join(' ') || '';
+
+    const usuarioFormateado = {
+      id: usuario.id,
+      cedula: usuario.cedula || undefined,
+      nombre: primerNombre,
+      apellido: apellidos,
+      nombreCompleto: usuario.nombreCompleto,
+      correo: usuario.correo,
+      rol: rolFront,
+      roles,
+      programaActivoId: usuario.programaActivoId || 'prog-medicina',
+      fechaRegistro: (usuario.creadoEn || new Date()).toISOString(),
+    };
+
     return {
-      usuario: {
-        id: usuario.id,
-        correo: usuario.correo,
-        nombreCompleto: usuario.nombreCompleto,
-        roles,
-      },
+      usuario: usuarioFormateado,
       tokens,
+      tokenAcceso: tokens.accessToken,
+      tokenRefresco: tokens.refreshToken,
     };
   }
 
@@ -247,9 +374,16 @@ export class AuthService {
       select: {
         id: true,
         correo: true,
+        nombre: true,
+        apellido: true,
         nombreCompleto: true,
         tipoIdentificacion: true,
-        numeroIdentificacion: true,
+        cedula: true,
+        rol: true,
+        programaActivoId: true,
+        googleId: true,
+        fotoUrl: true,
+        proveedorAuth: true,
         telefonoContacto: true,
         activo: true,
         correoVerificado: true,
@@ -307,6 +441,281 @@ export class AuthService {
         simuladoresConsumidos:
           suscripcionActiva?.simuladoresGratisConsumidos ?? 0,
       },
+    };
+  }
+
+  /**
+   * Autenticación con Google Identity Services (GIS)
+   * Login y Registro unificado en un solo paso
+   */
+  async autenticarConGoogle(dto: GoogleAuthDto) {
+    const googleClientId =
+      this.configService.get<string>('auth.googleClientId') ||
+      process.env.GOOGLE_CLIENT_ID;
+
+    let payload: any;
+    try {
+      const googleClient = new OAuth2Client(googleClientId);
+      const ticket = await googleClient.verifyIdToken({
+        idToken: dto.token,
+        audience: googleClientId,
+      });
+      payload = ticket.getPayload();
+    } catch (error: any) {
+      this.logger.warn(
+        `Error al verificar token de Google: ${error?.message || error}`,
+      );
+      throw new UnauthorizedException('Token de Google inválido o expirado');
+    }
+
+    if (!payload || !payload.email) {
+      throw new UnauthorizedException(
+        'El token de Google no contiene un correo electrónico válido',
+      );
+    }
+
+    const { email, sub: googleId, given_name, family_name, name, picture } =
+      payload;
+    const correoNormalizado = email.toLowerCase().trim();
+
+    // 2. Buscar si el usuario ya existe por Google ID o por Correo
+    let usuario = await this.prisma.usuario.findFirst({
+      where: {
+        OR: [{ googleId }, { correo: correoNormalizado }],
+      },
+      include: {
+        roles: {
+          include: {
+            rol: true,
+          },
+        },
+      },
+    });
+
+    const primerNombre = given_name || name?.split(' ')[0] || 'Estudiante';
+    const apellidos = family_name || name?.split(' ').slice(1).join(' ') || '';
+    const nombreCompleto =
+      [primerNombre, apellidos].filter(Boolean).join(' ') || 'Estudiante CACES';
+
+    if (!usuario) {
+      // 3. Crear usuario nuevo si no existe (sin cédula ni programa inicialmente)
+      const rolEstudiante = await this.prisma.rol.findUnique({
+        where: { nombre: RolNombre.ESTUDIANTE },
+      });
+
+      usuario = await this.prisma.$transaction(async (tx) => {
+        const nuevo = await tx.usuario.create({
+          data: {
+            correo: correoNormalizado,
+            nombre: primerNombre,
+            apellido: apellidos,
+            nombreCompleto,
+            googleId,
+            fotoUrl: picture || null,
+            proveedorAuth: 'google',
+            rol: 'estudiante',
+            correoVerificado: true,
+          },
+        });
+
+        if (rolEstudiante) {
+          await tx.usuarioRol.create({
+            data: {
+              usuarioId: nuevo.id,
+              rolId: rolEstudiante.id,
+            },
+          });
+        }
+
+        // Crear suscripción inicial en el plan base gratuito (vigencia 1 año)
+        const expiraEn = new Date();
+        expiraEn.setDate(expiraEn.getDate() + 365);
+
+        await tx.suscripcionUsuario.create({
+          data: {
+            usuarioId: nuevo.id,
+            planId: 'PLAN_GRATUITO_BASE',
+            estado: 'ACTIVA',
+            iniciaEn: new Date(),
+            expiraEn,
+            preguntasGratisConsumidas: 0,
+            simuladoresGratisConsumidos: 0,
+          },
+        });
+
+        return tx.usuario.findUnique({
+          where: { id: nuevo.id },
+          include: {
+            roles: {
+              include: {
+                rol: true,
+              },
+            },
+          },
+        }) as Promise<any>;
+      });
+    } else {
+      // Si existía con correo local pero ahora usa Google, vinculamos su googleId y foto
+      const datosActualizar: any = {};
+      if (!usuario.googleId) datosActualizar.googleId = googleId;
+      if (!usuario.fotoUrl && picture) datosActualizar.fotoUrl = picture;
+      if (usuario.proveedorAuth === 'local')
+        datosActualizar.proveedorAuth = 'google';
+
+      if (Object.keys(datosActualizar).length > 0) {
+        usuario = await this.prisma.usuario.update({
+          where: { id: usuario.id },
+          data: datosActualizar,
+          include: {
+            roles: {
+              include: {
+                rol: true,
+              },
+            },
+          },
+        });
+      }
+    }
+
+    if (!usuario) {
+      throw new UnauthorizedException(
+        'No se pudo completar el registro o autenticación del usuario con Google',
+      );
+    }
+
+    if (!usuario.activo) {
+      throw new UnauthorizedException('La cuenta se encuentra desactivada');
+    }
+
+    const roles = usuario.roles?.map((r: any) => r.rol.nombre) || [
+      RolNombre.ESTUDIANTE,
+    ];
+    const esAdmin =
+      roles.includes(RolNombre.SUPERADMIN) ||
+      roles.includes(RolNombre.TESORERIA);
+    const rolFront = esAdmin
+      ? 'administrador_academico'
+      : usuario.rol || 'estudiante';
+
+    // 4. Generar Tokens y registrar sesión
+    const tokens = await this.generarYGuardarTokens(
+      usuario.id,
+      usuario.correo,
+      roles,
+    );
+    const tokenAcceso = tokens.accessToken;
+
+    const nombreUsuario =
+      usuario.nombre || usuario.nombreCompleto?.split(' ')[0] || 'Estudiante';
+    const apellidoUsuario =
+      usuario.apellido ||
+      usuario.nombreCompleto?.split(' ').slice(1).join(' ') ||
+      '';
+
+    const usuarioFormateado = {
+      id: usuario.id,
+      cedula: usuario.cedula || null,
+      nombre: nombreUsuario,
+      apellido: apellidoUsuario,
+      nombreCompleto,
+      correo: usuario.correo,
+      rol: rolFront,
+      roles,
+      programaActivoId: usuario.programaActivoId || null,
+      fechaRegistro: (usuario.creadoEn || new Date()).toISOString(),
+    };
+
+    return {
+      tokenAcceso,
+      tokens,
+      usuario: usuarioFormateado,
+    };
+  }
+
+  /**
+   * Completar Perfil CACES (Cédula y Carrera obligatorias tras onboarding con Google)
+   */
+  async completarPerfil(usuarioId: string, dto: CompletarPerfilDto) {
+    const cedulaLimpia = dto.cedula.trim();
+
+    // 1. Validar algoritmo de cédula ecuatoriana
+    const valCedula = validarCedulaEcuatoriana(cedulaLimpia);
+    if (!valCedula.esValida) {
+      throw new BadRequestException(
+        valCedula.motivo || 'La cédula de identidad ecuatoriana no es válida',
+      );
+    }
+
+    // 2. Validar que la cédula no pertenezca a otro estudiante
+    const cedulaExistente = await this.prisma.usuario.findUnique({
+      where: { cedula: cedulaLimpia },
+    });
+
+    if (cedulaExistente && cedulaExistente.id !== usuarioId) {
+      throw new BadRequestException(
+        'El número de cédula ya se encuentra registrado por otro usuario',
+      );
+    }
+
+    // 2. Actualizar datos en la base de datos
+    const usuarioActualizado = await this.prisma.usuario.update({
+      where: { id: usuarioId },
+      data: {
+        cedula: cedulaLimpia,
+        programaActivoId: dto.programaActivoId.trim(),
+      },
+      include: {
+        roles: {
+          include: {
+            rol: true,
+          },
+        },
+      },
+    });
+
+    const roles = usuarioActualizado.roles?.map((r: any) => r.rol.nombre) || [
+      RolNombre.ESTUDIANTE,
+    ];
+    const esAdmin =
+      roles.includes(RolNombre.SUPERADMIN) ||
+      roles.includes(RolNombre.TESORERIA);
+    const rolFront = esAdmin
+      ? 'administrador_academico'
+      : usuarioActualizado.rol || 'estudiante';
+
+    const nombre =
+      usuarioActualizado.nombre ||
+      usuarioActualizado.nombreCompleto?.split(' ')[0] ||
+      'Estudiante';
+    const apellido =
+      usuarioActualizado.apellido ||
+      usuarioActualizado.nombreCompleto?.split(' ').slice(1).join(' ') ||
+      '';
+
+    const usuarioFormateado = {
+      id: usuarioActualizado.id,
+      cedula: usuarioActualizado.cedula,
+      nombre,
+      apellido,
+      nombreCompleto: usuarioActualizado.nombreCompleto,
+      correo: usuarioActualizado.correo,
+      rol: rolFront,
+      roles,
+      programaActivoId: usuarioActualizado.programaActivoId,
+      fechaRegistro: (usuarioActualizado.creadoEn || new Date()).toISOString(),
+    };
+
+    // Generar un token actualizado para comodidad del cliente
+    const tokens = await this.generarYGuardarTokens(
+      usuarioActualizado.id,
+      usuarioActualizado.correo,
+      roles,
+    );
+
+    return {
+      ...usuarioFormateado,
+      usuario: usuarioFormateado,
+      tokenAcceso: tokens.accessToken,
     };
   }
 
