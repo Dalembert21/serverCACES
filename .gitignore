@@ -1,6 +1,7 @@
 # Compilación y artefactos
 /dist
 /build
+*.tsbuildinfo
 
 # Dependencias
 /node_modules
