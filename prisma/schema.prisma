@@ -51,6 +51,8 @@ model Usuario {
   perfilTrabajador          PerfilTrabajador?
   preguntasFavoritas        PreguntaFavorita[]
   notasPreguntas            NotaEstudiantePregunta[]
+  reportesCreados           ReportePregunta[]             @relation("ReportesCreados")
+  reportesRevisados         ReportePregunta[]             @relation("ReportesRevisados")
   auditoriasOperaciones     AuditoriaOperacionSistema[]
   auditoriasAccesos         AuditoriaAccesoSeguridad[]
 
@@ -189,6 +191,7 @@ model AreaAcademica {
   subareasCompetencias SubareaCompetencia[]
   desglosesResultados  DesgloseResultadoArea[]
 
+  @@unique([temarioVersionId, nombre])
   @@map("AREAS_ACADEMICAS")
 }
 
@@ -258,9 +261,10 @@ model Pregunta {
   subarea     SubareaCompetencia @relation(fields: [subareaCompetenciaId], references: [id], onDelete: Restrict)
   casoClinico CasoClinico?       @relation(fields: [casoClinicoId], references: [id], onDelete: SetNull)
   creador     Usuario            @relation("PreguntaCreador", fields: [creadorId], references: [id], onDelete: Restrict)
-  versiones   PreguntaVersion[]
-  favoritos   PreguntaFavorita[]
+  versiones        PreguntaVersion[]
+  favoritos        PreguntaFavorita[]
   notasEstudiantes NotaEstudiantePregunta[]
+  reportes         ReportePregunta[]
 
   @@map("PREGUNTAS")
 }
@@ -283,6 +287,7 @@ model PreguntaVersion {
   referencias       PreguntaReferencia[]
   activosMultimedia ActivoMultimedia[]
   respuestas        RespuestaIntentoEvaluacion[]
+  reportes          ReportePregunta[]
 
   @@unique([preguntaId, numeroVersion])
   @@index([estado, dificultad])
@@ -329,6 +334,46 @@ model PreguntaReferencia {
   preguntaVersion PreguntaVersion @relation(fields: [preguntaVersionId], references: [id], onDelete: Cascade)
 
   @@map("BIBLIOGRAFIA_REFERENCIAS")
+}
+
+enum TipoReportePregunta {
+  ERROR_ENUNCIADO
+  RESPUESTA_INCORRECTA
+  EXPLICACION_INCORRECTA
+  ERROR_BIBLIOGRAFICO
+  IMAGEN_INCORRECTA
+  PREGUNTA_AMBIGUA
+  OTRO
+}
+
+enum EstadoReportePregunta {
+  PENDIENTE
+  EN_REVISION
+  ACEPTADO_CORREGIDO
+  RECHAZADO
+}
+
+model ReportePregunta {
+  id                  String                @id @default(uuid()) @map("REPORTE_PREGUNTA_ID")
+  preguntaId          String                @map("PREGUNTA_ID")
+  preguntaVersionId   String                @map("VERSION_PREGUNTA_ID")
+  usuarioId           String                @map("USUARIO_ID")
+  tipoReporte         TipoReportePregunta   @map("TIPO_REPORTE")
+  descripcion         String                @db.Text @map("DESCRIPCION_OBSERVACION")
+  estado              EstadoReportePregunta @default(PENDIENTE) @map("ESTADO_REPORTE")
+  revisadoPorId       String?               @map("REVISADO_POR_USUARIO_ID")
+  respuestaResolucion String?               @db.Text @map("RESPUESTA_RESOLUCION")
+  creadoEn            DateTime              @default(now()) @map("FECHA_CREACION")
+  resueltoEn          DateTime?             @map("FECHA_RESOLUCION")
+
+  pregunta        Pregunta        @relation(fields: [preguntaId], references: [id], onDelete: Cascade)
+  preguntaVersion PreguntaVersion @relation(fields: [preguntaVersionId], references: [id], onDelete: Cascade)
+  usuarioReporta  Usuario         @relation("ReportesCreados", fields: [usuarioId], references: [id], onDelete: Cascade)
+  revisor         Usuario?        @relation("ReportesRevisados", fields: [revisadoPorId], references: [id], onDelete: SetNull)
+
+  @@index([preguntaId, estado])
+  @@index([usuarioId])
+  @@map("REPORTES_PREGUNTAS")
 }
 
 // ============================================================================
