@@ -4,6 +4,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
 import { IniciarSimuladorDto } from './dto/iniciar-simulador.dto.js';
 import { FinalizarSimuladorDto } from './dto/finalizar-simulador.dto.js';
@@ -181,7 +182,7 @@ export class SimuladoresService {
     });
 
     // Guardar resultado consolidado en base de datos
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       await tx.intentoEvaluacion.update({
         where: { id: intento.id },
         data: {
