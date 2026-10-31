@@ -11,10 +11,15 @@ export class PracticaService {
   /**
    * Obtiene banco de preguntas formateado exactamente según PreguntaAcademica
    */
-  async obtenerPreguntas(programaId?: string, areaId?: string) {
+  async obtenerPreguntas(programaId?: string, areaId?: string, submoduloId?: string) {
     const preguntasDb = await this.prisma.pregunta.findMany({
       include: {
         casoClinico: true,
+        submodulo: {
+          include: {
+            programa: true,
+          },
+        },
         subarea: {
           include: {
             areaAcademica: {
@@ -42,10 +47,12 @@ export class PracticaService {
       .filter((p) => p.versiones.length > 0)
       .map((p) => {
         const version = p.versiones[0];
-        const area = p.subarea.areaAcademica;
-        const progCodigo = (
-          area.temarioVersion.programaAcademicoId || ''
-        ).toLowerCase().replace('caces-', '').replace('prog-', '');
+        const area = p.subarea?.areaAcademica;
+        const progCodigoRaw =
+          p.submodulo?.programaAcademicoId ||
+          area?.temarioVersion?.programaAcademicoId ||
+          '';
+        const progCodigo = progCodigoRaw.toLowerCase().replace('caces-', '').replace('prog-', '');
 
         const multimedia = version.activosMultimedia[0];
         const referencia = version.referencias[0];
@@ -56,9 +63,11 @@ export class PracticaService {
           id: p.id,
           codigoPublico: p.codigoPublico,
           programaId: `prog-${progCodigo}`,
-          areaId: area.id,
-          areaNombre: area.nombre,
-          subareaNombre: p.subarea.nombre,
+          submoduloId: p.submoduloId || undefined,
+          submoduloNombre: p.submodulo?.nombre || undefined,
+          areaId: area?.id || p.submoduloId || undefined,
+          areaNombre: area?.nombre || p.submodulo?.nombre || 'General',
+          subareaNombre: p.subarea?.nombre || p.submodulo?.nombre || 'General',
           casoClinico: p.casoClinico?.narrativaClinica || undefined,
           imagenClinicaUrl: multimedia?.urlAlmacenamiento || undefined,
           imagenClinicaDescripcion: multimedia?.descripcionAccesible || undefined,
@@ -82,7 +91,7 @@ export class PracticaService {
         };
       });
 
-    // Filtros por carrera o área
+    // Filtros por carrera, submódulo o área
     let resultado = preguntasFormateadas;
 
     if (programaId) {
@@ -90,6 +99,13 @@ export class PracticaService {
       const filtradas = resultado.filter((p) => p.programaId.includes(progClean));
       if (filtradas.length > 0) {
         resultado = filtradas;
+      }
+    }
+
+    if (submoduloId) {
+      const filtradasSub = resultado.filter((p) => p.submoduloId === submoduloId);
+      if (filtradasSub.length > 0) {
+        resultado = filtradasSub;
       }
     }
 

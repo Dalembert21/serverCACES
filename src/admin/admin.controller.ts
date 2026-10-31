@@ -24,19 +24,23 @@ import { AdminService } from './admin.service.js';
 import {
   ActivarPlanProDto,
   ActualizarAreaDto,
+  ActualizarBancoCooperativaDto,
   ActualizarDepartamentoDto,
   ActualizarEstadoPreguntaDto,
   ActualizarEstudianteAdminDto,
   ActualizarPlanDto,
   ActualizarPreguntaAdminDto,
   ActualizarProgramaDto,
+  ActualizarSubmoduloDto,
   ActualizarTrabajadorDto,
   CrearAreaDto,
+  CrearBancoCooperativaDto,
   CrearDepartamentoDto,
   CrearEstudianteAdminDto,
   CrearPlanDto,
   CrearPreguntaAdminDto,
   CrearProgramaDto,
+  CrearSubmoduloDto,
   CrearTrabajadorDto,
   RechazarPagoDto,
 } from './dto/index.js';
@@ -119,15 +123,17 @@ export class AdminController {
   @ApiOperation({
     summary: 'Activar membresía Pro a un estudiante',
     description:
-      'Permite a tesorería o superadmin activar directamente el plan Pro por N días.',
+      'Permite a tesorería o superadmin activar directamente el plan Pro por N días y registrar opcionalmente el comprobante.',
   })
   async activarPlanPro(
     @Param('id') estudianteId: string,
     @Body() dto: ActivarPlanProDto,
+    @UsuarioActual() operador: UsuarioAutenticado,
   ) {
     return this.adminService.activarPlanProEstudiante(
       estudianteId,
-      dto?.diasVigencia ?? 30,
+      dto,
+      operador.id,
     );
   }
 
@@ -214,12 +220,14 @@ export class AdminController {
     summary: 'Listar banco de preguntas para auditoría docente con filtros avanzados',
   })
   @ApiQuery({ name: 'programaId', required: false, description: 'Filtrar por carrera/programa' })
+  @ApiQuery({ name: 'submoduloId', required: false, description: 'Filtrar por ID del submódulo académico' })
   @ApiQuery({ name: 'areaId', required: false, description: 'Filtrar por ID del área temática' })
   @ApiQuery({ name: 'subareaId', required: false, description: 'Filtrar por código o ID de la subárea' })
   @ApiQuery({ name: 'estado', required: false, enum: EstadoPregunta, description: 'Filtrar por estado de revisión' })
   @ApiQuery({ name: 'termino', required: false, description: 'Búsqueda por texto en enunciado o código público' })
   async listarPreguntas(
     @Query('programaId') programaId?: string,
+    @Query('submoduloId') submoduloId?: string,
     @Query('areaId') areaId?: string,
     @Query('subareaId') subareaId?: string,
     @Query('estado') estado?: EstadoPregunta,
@@ -227,6 +235,7 @@ export class AdminController {
   ) {
     return this.adminService.listarPreguntasAdmin({
       programaId,
+      submoduloId,
       areaId,
       subareaId,
       estado,
@@ -440,6 +449,92 @@ export class AdminController {
   }
 
   // ============================================================================
+  // 5.1 GESTIÓN DE SUBMÓDULOS ACADÉMICOS (NIVEL 2 DIRECTO)
+  // ============================================================================
+
+  @Get('submodulos')
+  @Roles(RolNombre.SUPERADMIN, RolNombre.TESORERIA)
+  @ApiOperation({
+    summary: 'Listar submódulos académicos con filtros y conteo de preguntas',
+    description:
+      'Devuelve el catálogo de submódulos (Nivel 2), filtrable por módulo/carrera y por estado activo/inactivo.',
+  })
+  @ApiQuery({
+    name: 'programaId',
+    required: false,
+    description: 'Filtrar por ID de carrera/módulo (ej. MEDICINA, ENFERMERIA, ODONTOLOGIA)',
+  })
+  @ApiQuery({
+    name: 'activo',
+    required: false,
+    type: Boolean,
+    description: 'Filtrar por estado activo (true/false)',
+  })
+  async listarSubmodulos(
+    @Query('programaId') programaId?: string,
+    @Query('activo') activo?: string,
+  ) {
+    const estadoActivo =
+      activo === 'true' ? true : activo === 'false' ? false : undefined;
+    return this.adminService.listarSubmodulos(programaId, estadoActivo);
+  }
+
+  @Get('submodulos/:id')
+  @Roles(RolNombre.SUPERADMIN, RolNombre.TESORERIA)
+  @ApiOperation({
+    summary: 'Consultar detalle de un submódulo académico por identificador',
+  })
+  @ApiParam({ name: 'id', description: 'ID del submódulo' })
+  async obtenerSubmodulo(@Param('id') id: string) {
+    return this.adminService.obtenerSubmoduloPorId(id);
+  }
+
+  @Post('submodulos')
+  @Roles(RolNombre.SUPERADMIN)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Crear un nuevo submódulo académico (Solo Superadmin)',
+    description:
+      'Registra un submódulo asociado obligatoriamente a un módulo existente, validando que no haya nombres duplicados en ese módulo.',
+  })
+  async crearSubmodulo(@Body() dto: CrearSubmoduloDto) {
+    return this.adminService.crearSubmodulo(dto);
+  }
+
+  @Patch('submodulos/:id')
+  @Roles(RolNombre.SUPERADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Actualizar nombre, descripción o configuración de un submódulo (Solo Superadmin)',
+  })
+  async actualizarSubmodulo(
+    @Param('id') id: string,
+    @Body() dto: ActualizarSubmoduloDto,
+  ) {
+    return this.adminService.actualizarSubmodulo(id, dto);
+  }
+
+  @Patch('submodulos/:id/estado')
+  @Roles(RolNombre.SUPERADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Alternar estado activo/inactivo de un submódulo académico (Solo Superadmin)',
+  })
+  async alternarEstadoSubmodulo(@Param('id') id: string) {
+    return this.adminService.alternarEstadoSubmodulo(id);
+  }
+
+  @Delete('submodulos/:id')
+  @Roles(RolNombre.SUPERADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Eliminar submódulo académico si no contiene preguntas asociadas (Solo Superadmin)',
+  })
+  async eliminarSubmodulo(@Param('id') id: string) {
+    return this.adminService.eliminarSubmodulo(id);
+  }
+
+  // ============================================================================
   // 6. GESTIÓN DE TRABAJADORES (STAFF / PERSONAL ADMINISTRATIVO)
   // ============================================================================
 
@@ -573,5 +668,57 @@ export class AdminController {
   })
   async eliminarDepartamento(@Param('id') id: string) {
     return this.adminService.eliminarDepartamento(id);
+  }
+
+  // ============================================================================
+  // 7. ENTIDADES FINANCIERAS (BANCOS Y COOPERATIVAS)
+  // ============================================================================
+
+  @Get('bancos-cooperativas')
+  @Roles(RolNombre.SUPERADMIN, RolNombre.TESORERIA)
+  @ApiOperation({
+    summary: 'Listar entidades financieras registradas (Superadmin / Tesorería)',
+    description: 'Permite consultar bancos y cooperativas con conteo de transacciones.',
+  })
+  async listarBancosCooperativas(@Query('activo') activo?: string) {
+    const filtrarActivo =
+      activo !== undefined ? activo === 'true' : undefined;
+    return this.adminService.listarBancosCooperativas(filtrarActivo);
+  }
+
+  @Post('bancos-cooperativas')
+  @Roles(RolNombre.SUPERADMIN, RolNombre.TESORERIA)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Registrar nuevo banco o cooperativa oficial (Superadmin / Tesorería)',
+    description: 'Permite incorporar una nueva entidad al catálogo cuando se detecta recurrencia en pagos declarados.',
+  })
+  async crearBancoCooperativa(@Body() dto: CrearBancoCooperativaDto) {
+    return this.adminService.crearBancoCooperativa(dto);
+  }
+
+  @Patch('bancos-cooperativas/:id')
+  @Roles(RolNombre.SUPERADMIN, RolNombre.TESORERIA)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Actualizar entidad financiera (Superadmin / Tesorería)',
+    description: 'Modifica nombre, tipo o disponibilidad en combos.',
+  })
+  async actualizarBancoCooperativa(
+    @Param('id') id: string,
+    @Body() dto: ActualizarBancoCooperativaDto,
+  ) {
+    return this.adminService.actualizarBancoCooperativa(id, dto);
+  }
+
+  @Delete('bancos-cooperativas/:id')
+  @Roles(RolNombre.SUPERADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Eliminar o desactivar una entidad financiera (Solo Superadmin)',
+    description: 'Si cuenta con transacciones históricas se desactiva; si no tiene uso se elimina físicamente.',
+  })
+  async eliminarBancoCooperativa(@Param('id') id: string) {
+    return this.adminService.eliminarBancoCooperativa(id);
   }
 }

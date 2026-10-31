@@ -11,6 +11,10 @@ export class ProgramasService {
     const programasDb = await this.prisma.programaAcademico.findMany({
       where: { activo: true },
       include: {
+        submodulos: {
+          where: { activo: true },
+          orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+        },
         configuracionesSimulador: {
           where: { activo: true },
           orderBy: { totalPreguntas: 'desc' },
@@ -48,6 +52,13 @@ export class ProgramasService {
         ),
       }));
 
+      const submodulos = (prog.submodulos || []).map((s) => ({
+        id: s.id,
+        nombre: s.nombre,
+        descripcion: s.descripcion,
+        orden: s.orden,
+      }));
+
       const baseId = (prog.id || '').toLowerCase().replace('caces-', '').replace('prog-', '');
       const idFrontend = `prog-${baseId}`;
       const codigoCaces = `caces-${baseId}`;
@@ -63,6 +74,7 @@ export class ProgramasService {
         totalPreguntasExamen: plantillaOficial?.totalPreguntas ?? 150,
         duracionMinutosExamen: plantillaOficial?.duracionMinutos ?? 240,
         notaMinimaAprobacion: plantillaOficial?.notaMinimaAprobacion ?? 70,
+        submodulos,
         areas,
         estaActivo: prog.activo,
       };
@@ -96,6 +108,15 @@ export class ProgramasService {
         ],
       },
       include: {
+        submodulos: {
+          where: { activo: true },
+          orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+          include: {
+            _count: {
+              select: { preguntas: true },
+            },
+          },
+        },
         versionesTemarios: {
           where: { activo: true },
           include: {
@@ -116,6 +137,14 @@ export class ProgramasService {
       throw new NotFoundException(`Programa con identificador ${id} no encontrado`);
     }
 
+    const submodulos = (programa.submodulos || []).map((sub) => ({
+      id: sub.id,
+      nombre: sub.nombre,
+      descripcion: sub.descripcion,
+      orden: sub.orden,
+      totalPreguntas: sub._count.preguntas,
+    }));
+
     const temario = programa.versionesTemarios[0];
     const areas = (temario?.areas || []).map((area) => ({
       id: area.id,
@@ -133,6 +162,8 @@ export class ProgramasService {
       programaId: programa.id,
       nombrePrograma: programa.nombre,
       codigoOficialCaces: programa.codigoOficialCaces,
+      totalSubmodulos: submodulos.length,
+      submodulos,
       totalAreas: areas.length,
       areas,
     };

@@ -23,13 +23,19 @@ export class PracticaController {
   @ApiOperation({
     summary: 'Obtener preguntas de práctica para el estudiante',
     description:
-      'Devuelve el banco de preguntas formateado para la interfaz de práctica guiada, filtrable por programa y área.',
+      'Devuelve el banco de preguntas formateado para la interfaz de práctica guiada, filtrable por programa, área y submódulo.',
   })
   @ApiQuery({
     name: 'programaId',
     required: false,
     example: 'prog-medicina',
-    description: 'Código de la carrera CACES',
+    description: 'Código de la carrera CACES o módulo',
+  })
+  @ApiQuery({
+    name: 'submoduloId',
+    required: false,
+    example: 'uuid-submodulo',
+    description: 'Identificador del submódulo académico',
   })
   @ApiQuery({
     name: 'areaId',
@@ -43,9 +49,10 @@ export class PracticaController {
   })
   async obtenerPreguntas(
     @Query('programaId') programaId?: string,
+    @Query('submoduloId') submoduloId?: string,
     @Query('areaId') areaId?: string,
   ) {
-    return this.practicaService.obtenerPreguntas(programaId, areaId);
+    return this.practicaService.obtenerPreguntas(programaId, areaId, submoduloId);
   }
 
   @Post('respuestas')

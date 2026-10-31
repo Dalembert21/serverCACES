@@ -78,5 +78,18 @@ export function obtenerDatosComerciales() {
     },
   ];
 
-  return { planes, departamentos };
+  const bancosCooperativas = [
+    {
+      nombre: 'Banco Pichincha',
+      tipo: 'BANCO' as const,
+      activo: true,
+    },
+    {
+      nombre: 'Banco Guayaquil',
+      tipo: 'BANCO' as const,
+      activo: true,
+    },
+  ];
+
+  return { planes, departamentos, bancosCooperativas };
 }

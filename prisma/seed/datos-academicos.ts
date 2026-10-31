@@ -11,6 +11,22 @@ export function obtenerDatosAcademicos() {
       nombre: 'Medicina Humana',
       descripcion:
         'Preparación integral para el examen CACES de Medicina Humana con casos clínicos y razonamiento diagnóstico.',
+      submodulos: [
+        { nombre: 'Cardiología', descripcion: 'Enfermedades cardiovasculares, arritmias e insuficiencia cardíaca', orden: 1 },
+        { nombre: 'Medicina Interna', descripcion: 'Manejo clínico del adulto, endocrinología, nefrología y reumatología', orden: 2 },
+        { nombre: 'Medicina General', descripcion: 'Atención primaria y patologías prevalentes en medicina', orden: 3 },
+        { nombre: 'Neurología', descripcion: 'Patología neurológica, ACV, cefaleas y epilepsia', orden: 4 },
+        { nombre: 'Neumología', descripcion: 'Patología respiratoria del adulto, EPOC, asma e infecciones', orden: 5 },
+        { nombre: 'Pediatría', descripcion: 'Evaluación del crecimiento, desarrollo e infecciones en la infancia', orden: 6 },
+        { nombre: 'Cirugía General', descripcion: 'Abdomen agudo quirúrgico y patología digestiva de urgencia', orden: 7 },
+        { nombre: 'Gíneco-Obstetricia', descripcion: 'Control prenatal, emergencias obstétricas y salud reproductiva', orden: 8 },
+        { nombre: 'Traumatología y Ortopedia', descripcion: 'Atención del politraumatizado, fracturas y lesiones osteomusculares', orden: 9 },
+        { nombre: 'Oftalmología', descripcion: 'Urgencias oculares, ojo rojo y patología oftalmológica básica', orden: 10 },
+        { nombre: 'Otorrinolaringología', descripcion: 'Patología de oído, nariz, garganta y cuello', orden: 11 },
+        { nombre: 'Salud Mental', descripcion: 'Trastornos psiquiátricos prevalentes y urgencias en salud mental', orden: 12 },
+        { nombre: 'Salud Pública', descripcion: 'Epidemiología, vigilancia sanitaria y modelo MAIS-FCI', orden: 13 },
+        { nombre: 'Bioética Médica', descripcion: 'Deontología, consentimiento informado y marco normativo', orden: 14 },
+      ],
       areas: [
         {
           nombre: 'Medicina Interna',
@@ -250,6 +266,12 @@ export function obtenerDatosAcademicos() {
       nombre: 'Odontología',
       descripcion:
         'Preparación para el examen CACES de Odontología con énfasis en diagnóstico clínico, operatoria y cirugía bucal.',
+      submodulos: [
+        { nombre: 'Cirugía Bucal y Maxilofacial', descripcion: 'Procedimientos quirúrgicos ambulatorios y urgencias odontológicas', orden: 1 },
+        { nombre: 'Periodoncia y Endodoncia', descripcion: 'Patología pulpar, periapical y enfermedades periodontales', orden: 2 },
+        { nombre: 'Odontología General y Operatoria', descripcion: 'Operatoria dental, cariología y biomateriales dentales', orden: 3 },
+        { nombre: 'Rehabilitación Oral y Prótesis', descripcion: 'Prótesis fija, removible y oclusión', orden: 4 },
+      ],
       areas: [
         {
           nombre: 'Cirugía Bucal y Maxilofacial',
@@ -303,6 +325,12 @@ export function obtenerDatosAcademicos() {
       nombre: 'Enfermería',
       descripcion:
         'Preparación para el examen CACES de Enfermería: cuidados clínicos, materno-infantil y gestión del cuidado.',
+      submodulos: [
+        { nombre: 'Cuidados de Enfermería en el Adulto y Adulto Mayor', descripcion: 'Proceso de Atención de Enfermería (PAE) y farmacología clínica', orden: 1 },
+        { nombre: 'Salud Materno-Infantil y Comunitaria', descripcion: 'Cuidados en el embarazo, parto, puerperio y atención del niño sano', orden: 2 },
+        { nombre: 'Enfermería Quirúrgica y Cuidados Críticos', descripcion: 'Asepsia, quirófano, monitoreo y soporte vital en pacientes críticos', orden: 3 },
+        { nombre: 'Gestión y Administración del Cuidado', descripcion: 'Liderazgo, seguridad del paciente y gestión de servicios de salud', orden: 4 },
+      ],
       areas: [
         {
           nombre: 'Cuidados de Enfermería en el Adulto y Adulto Mayor',

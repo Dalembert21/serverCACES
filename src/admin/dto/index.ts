@@ -15,3 +15,7 @@ export * from './actualizar-area.dto.js';
 export * from './crear-estudiante-admin.dto.js';
 export * from './crear-departamento.dto.js';
 export * from './actualizar-departamento.dto.js';
+export * from './crear-banco-cooperativa.dto.js';
+export * from './actualizar-banco-cooperativa.dto.js';
+export * from './crear-submodulo.dto.js';
+export * from './actualizar-submodulo.dto.js';

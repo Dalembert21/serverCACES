@@ -130,11 +130,19 @@ export class SuscripcionesService {
       });
     }
 
+    const nombreEntidad = dto.entidadBancariaOrigen.trim();
+    const bancoDb = await this.prisma.bancoCooperativa.findFirst({
+      where: {
+        nombre: { equals: nombreEntidad, mode: 'insensitive' },
+      },
+    });
+
     const transaccion = await this.prisma.transaccionPago.create({
       data: {
         suscripcionUsuarioId: suscripcion.id,
         usuarioPagadorId: usuarioId,
-        entidadBancariaOrigen: dto.entidadBancariaOrigen.trim(),
+        bancoCooperativaId: bancoDb?.id || null,
+        entidadBancariaOrigen: nombreEntidad,
         numeroComprobanteReferencia: dto.numeroComprobanteReferencia.trim(),
         montoDolares: dto.montoDolares,
         urlFotoComprobante: dto.urlFotoComprobante?.trim() || null,
@@ -149,5 +157,20 @@ export class SuscripcionesService {
       transaccionId: transaccion.id,
       estado: transaccion.estado,
     };
+  }
+
+  /**
+   * Listar bancos y cooperativas disponibles (activos) para combos de transferencias
+   */
+  async listarBancosCooperativas() {
+    return this.prisma.bancoCooperativa.findMany({
+      where: { activo: true },
+      orderBy: { nombre: 'asc' },
+      select: {
+        id: true,
+        nombre: true,
+        tipo: true,
+      },
+    });
   }
 }

@@ -48,16 +48,32 @@ export class OpcionPreguntaAdminDto {
 }
 
 export class CrearPreguntaAdminDto {
-  @ApiProperty({ example: 'MED-INT-01', description: 'Código de subárea/competencia' })
+  @ApiProperty({
+    example: 'uuid-submodulo-cardiologia',
+    description: 'Identificador del submódulo académico al que pertenece la pregunta',
+    required: true,
+  })
+  @IsString({ message: 'El identificador del submódulo debe ser texto' })
+  @IsNotEmpty({ message: 'El submódulo académico es obligatorio' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  submoduloId: string;
+
+  @ApiProperty({
+    example: 'MED-INT-01',
+    description: 'Código de subárea/competencia oficial (opcional para trazabilidad CACES)',
+    required: false,
+  })
+  @IsOptional()
   @IsString({ message: 'El código de subárea debe ser texto' })
-  @IsNotEmpty({ message: 'El código de subárea es obligatorio' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
   @Matches(/^[a-zA-Z0-9\-_]{2,30}$/, {
     message: 'El código de subárea debe ser alfanumérico sin espacios ni símbolos especiales',
   })
-  codigoSubarea: string;
+  codigoSubarea?: string;
 
   @ApiProperty({ example: 'Paciente masculino de 65 años...' })
   @IsString({ message: 'El enunciado debe ser texto' })

@@ -158,7 +158,7 @@ export class SimuladoresService {
     const desglosePorArea = areasDb.map((area) => {
       const respuestasArea = intento.respuestas.filter(
         (r) =>
-          r.preguntaVersion.pregunta.subarea.areaAcademicaId === area.id,
+          r.preguntaVersion.pregunta.subarea?.areaAcademicaId === area.id,
       );
       const totalArea = Math.max(respuestasArea.length, 10);
       const aciertosArea = respuestasArea.filter((r) => r.esCorrecta).length;

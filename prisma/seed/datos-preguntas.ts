@@ -7,6 +7,7 @@ export function obtenerDatosPreguntas() {
   const preguntasMedicina = [
     {
       codigoPublico: 'MED-HTA-001',
+      submoduloNombre: 'Cardiología',
       temaNombre: 'Hipertensión Arterial y Síndrome Coronario',
       enunciado:
         'Paciente masculino de 58 años, hipertenso con tratamiento irregular, acude a emergencia por dolor retroesternal opresivo de 2 horas de evolución, irradiado a mandíbula y brazo izquierdo, acompañado de diaforesis. En el electrocardiograma se observa elevación del segmento ST de 3 mm en derivaciones V1 a V4. La presión arterial es de 145/90 mmHg, frecuencia cardíaca 88 lpm. ¿Cuál es la conducta terapéutica inicial de mayor prioridad?',
@@ -51,6 +52,7 @@ export function obtenerDatosPreguntas() {
     },
     {
       codigoPublico: 'MED-PED-001',
+      submoduloNombre: 'Pediatría',
       temaNombre: 'Infecciones Respiratorias Agudas Bajas en Pediatría',
       enunciado:
         'Lactante de 5 meses es llevado a consulta por tos, rinorrea y fiebre de bajo grado de 3 días de evolución, a lo que hoy se suma dificultad respiratoria. Al examen físico: taquipnea (FR 55 rpm), tiraje subcostal leve, sibilancias espiratorias bilaterales y subcrepitantes dispersos. Saturación de O2 al aire ambiente: 95%. Es su primer episodio de estas características. ¿Cuál es el diagnóstico más probable y el pilar terapéutico principal?',
@@ -97,6 +99,7 @@ export function obtenerDatosPreguntas() {
   const preguntasOdontologia = [
     {
       codigoPublico: 'ODON-CIR-001',
+      submoduloNombre: 'Cirugía Bucal y Maxilofacial',
       temaNombre: 'Exodoncia Compleja y Manejo de Infecciones Odontogénicas',
       enunciado:
         'Paciente de 32 años acude a la clínica 72 horas posteriores a la exodoncia de un tercer molar mandibular (pieza 38). Refiere dolor intenso, constante e irradiado al oído, que no cede con analgésicos convencionales. A la exploración intraoral se observa el alvéolo denudado, sin coágulo sanguíneo, con restos de alimentos y fetidez pronunciada. La mucosa adyacente no presenta tumefacción fluctuante ni fiebre. ¿Cuál es el diagnóstico y el tratamiento de elección?',
@@ -143,6 +146,7 @@ export function obtenerDatosPreguntas() {
   const preguntasEnfermeria = [
     {
       codigoPublico: 'ENF-FAR-001',
+      submoduloNombre: 'Cuidados de Enfermería en el Adulto y Adulto Mayor',
       temaNombre: 'Administración Segura de Medicamentos y Cuidados Intensivos',
       enunciado:
         'El médico prescribe una infusión de 500 ml de solución salina al 0.9% para pasar en 4 horas a través de un equipo de macrogoteo (factor de goteo: 20 gotas/ml). ¿A cuántas gotas por minuto debe calibrar el goteo el personal de enfermería?',
