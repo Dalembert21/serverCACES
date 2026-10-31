@@ -17,19 +17,23 @@ import { validarClaveSegura } from '../common/index.js';
 import {
   ActivarPlanProDto,
   ActualizarAreaDto,
+  ActualizarBancoCooperativaDto,
   ActualizarDepartamentoDto,
   ActualizarEstadoPreguntaDto,
   ActualizarEstudianteAdminDto,
   ActualizarPlanDto,
   ActualizarPreguntaAdminDto,
   ActualizarProgramaDto,
+  ActualizarSubmoduloDto,
   ActualizarTrabajadorDto,
   CrearAreaDto,
+  CrearBancoCooperativaDto,
   CrearDepartamentoDto,
   CrearEstudianteAdminDto,
   CrearPlanDto,
   CrearPreguntaAdminDto,
   CrearProgramaDto,
+  CrearSubmoduloDto,
   CrearTrabajadorDto,
   RechazarPagoDto,
 } from './dto/index.js';
@@ -456,7 +460,14 @@ export class AdminService {
   /**
    * Activa manualmente el plan Pro para un estudiante (beca o activación directa)
    */
-  async activarPlanProEstudiante(estudianteId: string, diasVigencia: number = 30) {
+  async activarPlanProEstudiante(
+    estudianteId: string,
+    param: number | ActivarPlanProDto = 30,
+    operadorId?: string,
+  ) {
+    const diasVigencia = typeof param === 'number' ? param : (param?.diasVigencia ?? 30);
+    const dto = typeof param === 'object' ? param : undefined;
+
     const estudiante = await this.prisma.usuario.findUnique({
       where: { id: estudianteId },
     });
@@ -491,6 +502,31 @@ export class AdminService {
         expiraEn,
       },
     });
+
+    // Si se enviaron datos de pago o comprobante, registrar la transacción como aprobada
+    if (dto?.banco || dto?.numeroReferencia) {
+      const nombreEntidad = (dto.banco || 'Transferencia Bancaria Directa').trim();
+      const bancoDb = await this.prisma.bancoCooperativa.findFirst({
+        where: {
+          nombre: { equals: nombreEntidad, mode: 'insensitive' },
+        },
+      });
+
+      const ref = dto.numeroReferencia?.trim() || `ACT-DIRECTA-${Date.now().toString().slice(-6)}`;
+      await this.prisma.transaccionPago.create({
+        data: {
+          suscripcionUsuarioId: suscripcion.id,
+          usuarioPagadorId: estudiante.id,
+          bancoCooperativaId: bancoDb?.id || null,
+          entidadBancariaOrigen: nombreEntidad,
+          numeroComprobanteReferencia: ref,
+          montoDolares: dto.monto ?? planPro.precioDolares,
+          estado: 'APROBADA',
+          administradorAprobadorId: operadorId || null,
+          fechaPagoDeclarada: new Date(),
+        },
+      });
+    }
 
     return {
       mensaje: `Plan Pro activado exitosamente para ${estudiante.nombreCompleto} por ${diasVigencia} días.`,
@@ -720,25 +756,53 @@ export class AdminService {
    * Crea una nueva pregunta con su versión 1, opciones de respuesta y bibliografía
    */
   async crearPregunta(dto: CrearPreguntaAdminDto, creadorId: string) {
-    const subarea = await this.prisma.subareaCompetencia.findFirst({
-      where: {
-        OR: [{ id: dto.codigoSubarea }, { codigoOficial: dto.codigoSubarea }],
-      },
-    });
-
-    if (!subarea) {
-      throw new NotFoundException(
-        `Subárea/Competencia con código "${dto.codigoSubarea}" no encontrada en el catálogo CACES`,
-      );
+    // 1. Validar submódulo académico obligatorio
+    let submodulo: any = null;
+    if (dto.submoduloId) {
+      submodulo = await this.prisma.submoduloAcademico.findUnique({
+        where: { id: dto.submoduloId },
+        include: { programa: true },
+      });
+      if (!submodulo) {
+        throw new NotFoundException(
+          `Submódulo académico con ID "${dto.submoduloId}" no encontrado`,
+        );
+      }
+      if (!submodulo.activo) {
+        throw new BadRequestException(
+          `No se puede asociar una pregunta a un submódulo inactivo ("${submodulo.nombre}")`,
+        );
+      }
+    } else if (!dto.codigoSubarea) {
+      throw new BadRequestException('El submódulo académico es obligatorio para crear la pregunta');
     }
 
+    // 2. Resolver subárea CACES si se proporciona
+    let subarea: any = null;
+    if (dto.codigoSubarea) {
+      subarea = await this.prisma.subareaCompetencia.findFirst({
+        where: {
+          OR: [{ id: dto.codigoSubarea }, { codigoOficial: dto.codigoSubarea }],
+        },
+      });
+      if (!subarea && !submodulo) {
+        throw new NotFoundException(
+          `Subárea/Competencia con código "${dto.codigoSubarea}" no encontrada en el catálogo CACES`,
+        );
+      }
+    }
+
+    const prefijo = submodulo
+      ? `${submodulo.programaAcademicoId.slice(0, 3)}-${submodulo.nombre.slice(0, 4).toUpperCase().replace(/\s+/g, '')}`
+      : (dto.codigoSubarea || 'PREG').toUpperCase();
     const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
-    const codigoPublico = `PREG-${dto.codigoSubarea.toUpperCase()}-${Date.now().toString().slice(-4)}${randomSuffix}`;
+    const codigoPublico = `PREG-${prefijo}-${Date.now().toString().slice(-4)}${randomSuffix}`;
 
     return this.prisma.$transaction(async (tx) => {
       const pregunta = await tx.pregunta.create({
         data: {
-          subareaCompetenciaId: subarea.id,
+          submoduloId: submodulo?.id || null,
+          subareaCompetenciaId: subarea?.id || null,
           codigoPublico,
           creadorId,
         },
@@ -806,6 +870,9 @@ export class AdminService {
     const pregunta = await this.prisma.pregunta.findFirst({
       where: { OR: [{ id }, { codigoPublico: id }] },
       include: {
+        submodulo: {
+          include: { programa: true },
+        },
         subarea: {
           include: {
             areaAcademica: {
@@ -839,13 +906,21 @@ export class AdminService {
     return {
       id: pregunta.id,
       codigoPublico: pregunta.codigoPublico,
+      submoduloId: pregunta.submoduloId,
+      submoduloNombre: pregunta.submodulo?.nombre || null,
       programa:
-        pregunta.subarea.areaAcademica.temarioVersion.programa.nombre,
-      areaId: pregunta.subarea.areaAcademicaId,
-      areaNombre: pregunta.subarea.areaAcademica.nombre,
-      subareaId: pregunta.subarea.id,
-      subareaCodigo: pregunta.subarea.codigoOficial,
-      subareaNombre: pregunta.subarea.nombre,
+        pregunta.submodulo?.programa?.nombre ||
+        pregunta.subarea?.areaAcademica?.temarioVersion?.programa?.nombre ||
+        'General',
+      programaId:
+        pregunta.submodulo?.programaAcademicoId ||
+        pregunta.subarea?.areaAcademica?.temarioVersion?.programaAcademicoId ||
+        null,
+      areaId: pregunta.subarea?.areaAcademicaId || null,
+      areaNombre: pregunta.subarea?.areaAcademica?.nombre || null,
+      subareaId: pregunta.subarea?.id || null,
+      subareaCodigo: pregunta.subarea?.codigoOficial || null,
+      subareaNombre: pregunta.subarea?.nombre || null,
       creadorNombre: pregunta.creador?.nombreCompleto || 'Docente',
       enunciado: v?.enunciado ?? '',
       explicacionPedagogica: v?.explicacionPedagogica ?? '',
@@ -898,6 +973,26 @@ export class AdminService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      if (dto.submoduloId) {
+        const submodulo = await tx.submoduloAcademico.findUnique({
+          where: { id: dto.submoduloId },
+        });
+        if (!submodulo) {
+          throw new NotFoundException(
+            `Submódulo académico con ID "${dto.submoduloId}" no encontrado`,
+          );
+        }
+        if (!submodulo.activo) {
+          throw new BadRequestException(
+            `No se puede asociar una pregunta a un submódulo inactivo ("${submodulo.nombre}")`,
+          );
+        }
+        await tx.pregunta.update({
+          where: { id: pregunta.id },
+          data: { submoduloId: submodulo.id },
+        });
+      }
+
       if (dto.codigoSubarea) {
         const subarea = await tx.subareaCompetencia.findFirst({
           where: {
@@ -1063,10 +1158,11 @@ export class AdminService {
   }
 
   /**
-   * Lista banco completo de preguntas con soporte para filtros de programa, área, subárea, estado y búsqueda
+   * Lista banco completo de preguntas con soporte para filtros de programa, submodulo, área, subárea, estado y búsqueda
    */
   async listarPreguntasAdmin(filtros?: {
     programaId?: string;
+    submoduloId?: string;
     areaId?: string;
     subareaId?: string;
     estado?: EstadoPregunta;
@@ -1074,7 +1170,9 @@ export class AdminService {
   }) {
     const where: any = {};
 
-    if (filtros?.subareaId) {
+    if (filtros?.submoduloId) {
+      where.submoduloId = filtros.submoduloId;
+    } else if (filtros?.subareaId) {
       where.OR = [
         { subareaCompetenciaId: filtros.subareaId },
         { subarea: { codigoOficial: filtros.subareaId } },
@@ -1083,19 +1181,31 @@ export class AdminService {
       where.subarea = { areaAcademicaId: filtros.areaId };
     } else if (filtros?.programaId) {
       const progLimpio = filtros.programaId.trim();
-      where.subarea = {
-        areaAcademica: {
-          temarioVersion: {
-            programaAcademico: {
-              OR: [
-                { id: progLimpio },
-                { id: progLimpio.toUpperCase() },
-                { id: `caces-${progLimpio.toLowerCase().replace('prog-', '')}` },
-              ],
+      where.OR = [
+        {
+          submodulo: {
+            OR: [
+              { programaAcademicoId: progLimpio },
+              { programaAcademicoId: progLimpio.toUpperCase() },
+            ],
+          },
+        },
+        {
+          subarea: {
+            areaAcademica: {
+              temarioVersion: {
+                programaAcademico: {
+                  OR: [
+                    { id: progLimpio },
+                    { id: progLimpio.toUpperCase() },
+                    { id: `caces-${progLimpio.toLowerCase().replace('prog-', '')}` },
+                  ],
+                },
+              },
             },
           },
         },
-      };
+      ];
     }
 
     if (filtros?.estado) {
@@ -1123,6 +1233,9 @@ export class AdminService {
     const preguntas = await this.prisma.pregunta.findMany({
       where,
       include: {
+        submodulo: {
+          include: { programa: true },
+        },
         subarea: {
           include: {
             areaAcademica: true,
@@ -1148,10 +1261,18 @@ export class AdminService {
       return {
         id: p.id,
         codigoPublico: p.codigoPublico,
-        areaId: p.subarea.areaAcademicaId,
-        areaNombre: p.subarea.areaAcademica.nombre,
-        subareaCodigo: p.subarea.codigoOficial,
-        subareaNombre: p.subarea.nombre,
+        submoduloId: p.submoduloId,
+        submoduloNombre: p.submodulo?.nombre || null,
+        programaId:
+          p.submodulo?.programaAcademicoId ||
+          p.subarea?.areaAcademica?.nombre ||
+          null,
+        programaNombre:
+          p.submodulo?.programa?.nombre || 'General',
+        areaId: p.subarea?.areaAcademicaId || null,
+        areaNombre: p.subarea?.areaAcademica?.nombre || null,
+        subareaCodigo: p.subarea?.codigoOficial || null,
+        subareaNombre: p.subarea?.nombre || null,
         enunciado: v?.enunciado ?? '',
         explicacionPedagogica: v?.explicacionPedagogica ?? '',
         dificultad: v?.dificultad ?? 'MEDIA',
@@ -1599,6 +1720,283 @@ export class AdminService {
     await this.prisma.areaAcademica.delete({ where: { id } });
     return {
       mensaje: 'Área académica eliminada exitosamente',
+      id,
+    };
+  }
+
+  // ============================================================================
+  // 5.1 GESTIÓN DE SUBMÓDULOS ACADÉMICOS (NIVEL 2 DIRECTO)
+  // ============================================================================
+
+  /**
+   * Lista submódulos académicos con conteo de preguntas y filtros por módulo/estado
+   */
+  async listarSubmodulos(programaId?: string, activo?: boolean) {
+    const where: any = {};
+
+    if (programaId && programaId.trim()) {
+      const progClean = programaId.trim().toUpperCase().replace('PROG-', '').replace('CACES-', '');
+      where.programaAcademicoId = {
+        contains: progClean,
+        mode: 'insensitive',
+      };
+    }
+
+    if (activo !== undefined) {
+      where.activo = activo;
+    }
+
+    const submodulos = await this.prisma.submoduloAcademico.findMany({
+      where,
+      include: {
+        programa: true,
+        _count: {
+          select: { preguntas: true },
+        },
+      },
+      orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+    });
+
+    return submodulos.map((s) => ({
+      id: s.id,
+      programaId: s.programaAcademicoId,
+      programaNombre: s.programa.nombre,
+      nombre: s.nombre,
+      descripcion: s.descripcion,
+      orden: s.orden,
+      activo: s.activo,
+      totalPreguntas: s._count.preguntas,
+      creadoEn: s.creadoEn,
+      actualizadoEn: s.actualizadoEn,
+    }));
+  }
+
+  /**
+   * Obtiene el detalle de un submódulo académico por ID
+   */
+  async obtenerSubmoduloPorId(id: string) {
+    const submodulo = await this.prisma.submoduloAcademico.findUnique({
+      where: { id },
+      include: {
+        programa: true,
+        _count: {
+          select: { preguntas: true },
+        },
+      },
+    });
+
+    if (!submodulo) {
+      throw new NotFoundException(`Submódulo académico con ID "${id}" no encontrado`);
+    }
+
+    return {
+      id: submodulo.id,
+      programaId: submodulo.programaAcademicoId,
+      programaNombre: submodulo.programa.nombre,
+      nombre: submodulo.nombre,
+      descripcion: submodulo.descripcion,
+      orden: submodulo.orden,
+      activo: submodulo.activo,
+      totalPreguntas: submodulo._count.preguntas,
+      creadoEn: submodulo.creadoEn,
+      actualizadoEn: submodulo.actualizadoEn,
+    };
+  }
+
+  /**
+   * Crea un nuevo submódulo académico validando unicidad por módulo
+   */
+  async crearSubmodulo(dto: CrearSubmoduloDto) {
+    const programa = await this.prisma.programaAcademico.findFirst({
+      where: {
+        OR: [
+          { id: dto.programaAcademicoId },
+          { id: dto.programaAcademicoId.toUpperCase() },
+          { codigoOficialCaces: dto.programaAcademicoId },
+        ],
+      },
+    });
+
+    if (!programa) {
+      throw new NotFoundException(
+        `El módulo académico "${dto.programaAcademicoId}" no existe en el sistema`,
+      );
+    }
+
+    const nombreNormalizado = dto.nombre.trim().replace(/\s+/g, ' ');
+
+    // Validar nombre duplicado dentro del mismo programa (case-insensitive)
+    const existente = await this.prisma.submoduloAcademico.findFirst({
+      where: {
+        programaAcademicoId: programa.id,
+        nombre: {
+          equals: nombreNormalizado,
+          mode: 'insensitive',
+        },
+      },
+    });
+
+    if (existente) {
+      throw new ConflictException(
+        `Ya existe un submódulo con el nombre "${nombreNormalizado}" en el módulo ${programa.nombre}`,
+      );
+    }
+
+    const submodulo = await this.prisma.submoduloAcademico.create({
+      data: {
+        programaAcademicoId: programa.id,
+        nombre: nombreNormalizado,
+        descripcion: dto.descripcion || null,
+        orden: dto.orden !== undefined ? dto.orden : 0,
+        activo: dto.activo !== undefined ? dto.activo : true,
+      },
+      include: { programa: true },
+    });
+
+    return {
+      mensaje: 'Submódulo académico creado exitosamente',
+      submodulo: {
+        id: submodulo.id,
+        programaId: submodulo.programaAcademicoId,
+        programaNombre: submodulo.programa.nombre,
+        nombre: submodulo.nombre,
+        descripcion: submodulo.descripcion,
+        orden: submodulo.orden,
+        activo: submodulo.activo,
+        creadoEn: submodulo.creadoEn,
+      },
+    };
+  }
+
+  /**
+   * Actualiza los datos de un submódulo académico
+   */
+  async actualizarSubmodulo(id: string, dto: ActualizarSubmoduloDto) {
+    const submodulo = await this.prisma.submoduloAcademico.findUnique({
+      where: { id },
+    });
+
+    if (!submodulo) {
+      throw new NotFoundException(`Submódulo académico con ID "${id}" no encontrado`);
+    }
+
+    const dataToUpdate: any = {};
+
+    if (dto.nombre !== undefined) {
+      const nombreNormalizado = dto.nombre.trim().replace(/\s+/g, ' ');
+      // Validar que no colisione con otro submódulo del mismo programa
+      const duplicado = await this.prisma.submoduloAcademico.findFirst({
+        where: {
+          programaAcademicoId: submodulo.programaAcademicoId,
+          nombre: {
+            equals: nombreNormalizado,
+            mode: 'insensitive',
+          },
+          id: { not: id },
+        },
+      });
+
+      if (duplicado) {
+        throw new ConflictException(
+          `Ya existe otro submódulo con el nombre "${nombreNormalizado}" en este módulo`,
+        );
+      }
+
+      dataToUpdate.nombre = nombreNormalizado;
+    }
+
+    if (dto.descripcion !== undefined) {
+      dataToUpdate.descripcion = dto.descripcion ? dto.descripcion.trim() : null;
+    }
+
+    if (dto.orden !== undefined) {
+      dataToUpdate.orden = dto.orden;
+    }
+
+    if (dto.activo !== undefined) {
+      dataToUpdate.activo = dto.activo;
+    }
+
+    const actualizado = await this.prisma.submoduloAcademico.update({
+      where: { id },
+      data: dataToUpdate,
+      include: {
+        programa: true,
+        _count: { select: { preguntas: true } },
+      },
+    });
+
+    return {
+      mensaje: 'Submódulo académico actualizado exitosamente',
+      submodulo: {
+        id: actualizado.id,
+        programaId: actualizado.programaAcademicoId,
+        programaNombre: actualizado.programa.nombre,
+        nombre: actualizado.nombre,
+        descripcion: actualizado.descripcion,
+        orden: actualizado.orden,
+        activo: actualizado.activo,
+        totalPreguntas: actualizado._count.preguntas,
+        actualizadoEn: actualizado.actualizadoEn,
+      },
+    };
+  }
+
+  /**
+   * Alterna el estado activo/inactivo (desactivación lógica)
+   */
+  async alternarEstadoSubmodulo(id: string) {
+    const submodulo = await this.prisma.submoduloAcademico.findUnique({
+      where: { id },
+    });
+
+    if (!submodulo) {
+      throw new NotFoundException(`Submódulo académico con ID "${id}" no encontrado`);
+    }
+
+    const nuevoEstado = !submodulo.activo;
+    const actualizado = await this.prisma.submoduloAcademico.update({
+      where: { id },
+      data: { activo: nuevoEstado },
+    });
+
+    return {
+      mensaje: `Submódulo académico ${nuevoEstado ? 'activado' : 'desactivado'} exitosamente`,
+      id: actualizado.id,
+      nombre: actualizado.nombre,
+      activo: actualizado.activo,
+    };
+  }
+
+  /**
+   * Elimina un submódulo académico únicamente si no tiene preguntas asociadas
+   */
+  async eliminarSubmodulo(id: string) {
+    const submodulo = await this.prisma.submoduloAcademico.findUnique({
+      where: { id },
+      include: {
+        _count: {
+          select: { preguntas: true },
+        },
+      },
+    });
+
+    if (!submodulo) {
+      throw new NotFoundException(`Submódulo académico con ID "${id}" no encontrado`);
+    }
+
+    if (submodulo._count.preguntas > 0) {
+      throw new ConflictException(
+        `No se puede eliminar el submódulo "${submodulo.nombre}" porque contiene ${submodulo._count.preguntas} pregunta(s) asociada(s). Utilice la desactivación lógica en su lugar.`,
+      );
+    }
+
+    await this.prisma.submoduloAcademico.delete({
+      where: { id },
+    });
+
+    return {
+      mensaje: 'Submódulo académico eliminado exitosamente',
       id,
     };
   }
@@ -2229,6 +2627,141 @@ export class AdminService {
 
     return {
       mensaje: `Departamento "${depto.nombre}" eliminado exitosamente`,
+      id,
+    };
+  }
+
+  // ============================================================================
+  // 7. ENTIDADES FINANCIERAS (BANCOS Y COOPERATIVAS DE PAGO)
+  // ============================================================================
+
+  /**
+   * Listar todos los bancos y cooperativas registrados
+   */
+  async listarBancosCooperativas(activo?: boolean) {
+    const where: any = {};
+    if (activo !== undefined) {
+      where.activo = activo;
+    }
+    return this.prisma.bancoCooperativa.findMany({
+      where,
+      orderBy: { nombre: 'asc' },
+      include: {
+        _count: {
+          select: { transacciones: true },
+        },
+      },
+    });
+  }
+
+  /**
+   * Crear un nuevo banco o cooperativa oficial
+   */
+  async crearBancoCooperativa(dto: CrearBancoCooperativaDto) {
+    const existe = await this.prisma.bancoCooperativa.findFirst({
+      where: {
+        nombre: { equals: dto.nombre.trim(), mode: 'insensitive' },
+      },
+    });
+
+    if (existe) {
+      throw new ConflictException(
+        `La entidad financiera "${dto.nombre.trim()}" ya se encuentra registrada.`,
+      );
+    }
+
+    const creada = await this.prisma.bancoCooperativa.create({
+      data: {
+        nombre: dto.nombre.trim(),
+        tipo: dto.tipo ?? 'BANCO',
+        activo: dto.activo ?? true,
+      },
+    });
+
+    return {
+      mensaje: `Entidad financiera "${creada.nombre}" registrada exitosamente.`,
+      entidad: creada,
+    };
+  }
+
+  /**
+   * Actualizar nombre, tipo o disponibilidad de un banco o cooperativa
+   */
+  async actualizarBancoCooperativa(
+    id: string,
+    dto: ActualizarBancoCooperativaDto,
+  ) {
+    const entidad = await this.prisma.bancoCooperativa.findUnique({
+      where: { id },
+    });
+
+    if (!entidad) {
+      throw new NotFoundException('Entidad financiera no encontrada');
+    }
+
+    if (dto.nombre && dto.nombre.trim().toLowerCase() !== entidad.nombre.toLowerCase()) {
+      const duplicado = await this.prisma.bancoCooperativa.findFirst({
+        where: {
+          nombre: { equals: dto.nombre.trim(), mode: 'insensitive' },
+          id: { not: id },
+        },
+      });
+
+      if (duplicado) {
+        throw new ConflictException(
+          `Ya existe otra entidad con el nombre "${dto.nombre.trim()}"`,
+        );
+      }
+    }
+
+    const actualizada = await this.prisma.bancoCooperativa.update({
+      where: { id },
+      data: {
+        ...(dto.nombre ? { nombre: dto.nombre.trim() } : {}),
+        ...(dto.tipo ? { tipo: dto.tipo } : {}),
+        ...(dto.activo !== undefined ? { activo: dto.activo } : {}),
+      },
+    });
+
+    return {
+      mensaje: `Entidad "${actualizada.nombre}" actualizada exitosamente.`,
+      entidad: actualizada,
+    };
+  }
+
+  /**
+   * Desactivar o eliminar una entidad financiera
+   */
+  async eliminarBancoCooperativa(id: string) {
+    const entidad = await this.prisma.bancoCooperativa.findUnique({
+      where: { id },
+      include: {
+        _count: { select: { transacciones: true } },
+      },
+    });
+
+    if (!entidad) {
+      throw new NotFoundException('Entidad financiera no encontrada');
+    }
+
+    if (entidad._count.transacciones > 0) {
+      const desactivada = await this.prisma.bancoCooperativa.update({
+        where: { id },
+        data: { activo: false },
+      });
+      return {
+        mensaje: `La entidad cuenta con ${entidad._count.transacciones} transacción(es) histórica(s). Se ha desactivado para proteger la auditoría contable.`,
+        desactivada: true,
+        entidad: desactivada,
+      };
+    }
+
+    await this.prisma.bancoCooperativa.delete({
+      where: { id },
+    });
+
+    return {
+      mensaje: `Entidad "${entidad.nombre}" eliminada exitosamente.`,
       id,
     };
   }

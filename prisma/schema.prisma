@@ -160,8 +160,27 @@ model ProgramaAcademico {
 
   versionesTemarios         TemarioVersion[]
   configuracionesSimulador ConfiguracionSimulador[]
+  submodulos               SubmoduloAcademico[]
 
   @@map("PROGRAMAS_ACADEMICOS")
+}
+
+model SubmoduloAcademico {
+  id                  String   @id @default(uuid()) @map("SUBMODULO_ACADEMICO_ID")
+  programaAcademicoId String   @map("PROGRAMA_ACADEMICO_ID")
+  nombre              String   @map("NOMBRE_SUBMODULO")
+  descripcion         String?  @map("DESCRIPCION_SUBMODULO")
+  orden               Int      @default(0) @map("ORDEN_VISUALIZACION")
+  activo              Boolean  @default(true) @map("ESTADO_ACTIVO")
+  creadoEn            DateTime @default(now()) @map("FECHA_CREACION")
+  actualizadoEn       DateTime @updatedAt @map("FECHA_ACTUALIZACION")
+
+  programa            ProgramaAcademico @relation(fields: [programaAcademicoId], references: [id], onDelete: Restrict)
+  preguntas           Pregunta[]
+
+  @@unique([programaAcademicoId, nombre])
+  @@index([programaAcademicoId, activo])
+  @@map("SUBMODULOS_ACADEMICOS")
 }
 
 model TemarioVersion {
@@ -252,13 +271,15 @@ model CasoClinico {
 
 model Pregunta {
   id                   String   @id @default(uuid()) @map("PREGUNTA_ID")
-  subareaCompetenciaId String   @map("SUBAREA_COMPETENCIA_ID")
+  submoduloId          String?  @map("SUBMODULO_ACADEMICO_ID")
+  subareaCompetenciaId String?  @map("SUBAREA_COMPETENCIA_ID")
   casoClinicoId        String?  @map("CASO_CLINICO_ID")
   codigoPublico        String   @unique @map("CODIGO_IDENTIFICADOR_PUBLICO")
   creadorId            String   @map("AUTOR_DOCENTE_ID")
   creadoEn             DateTime @default(now()) @map("FECHA_CREACION")
 
-  subarea     SubareaCompetencia @relation(fields: [subareaCompetenciaId], references: [id], onDelete: Restrict)
+  submodulo   SubmoduloAcademico? @relation(fields: [submoduloId], references: [id], onDelete: Restrict)
+  subarea     SubareaCompetencia? @relation(fields: [subareaCompetenciaId], references: [id], onDelete: SetNull)
   casoClinico CasoClinico?       @relation(fields: [casoClinicoId], references: [id], onDelete: SetNull)
   creador     Usuario            @relation("PreguntaCreador", fields: [creadorId], references: [id], onDelete: Restrict)
   versiones        PreguntaVersion[]
@@ -266,6 +287,7 @@ model Pregunta {
   notasEstudiantes NotaEstudiantePregunta[]
   reportes         ReportePregunta[]
 
+  @@index([submoduloId])
   @@map("PREGUNTAS")
 }
 
@@ -526,6 +548,25 @@ enum EstadoPago {
   RECHAZADA
 }
 
+enum TipoInstitucionFinanciera {
+  BANCO
+  COOPERATIVA
+  OTRO
+}
+
+model BancoCooperativa {
+  id            String                    @id @default(uuid()) @map("BANCO_COOPERATIVA_ID")
+  nombre        String                    @unique @map("NOMBRE")
+  tipo          TipoInstitucionFinanciera @default(BANCO) @map("TIPO")
+  activo        Boolean                   @default(true) @map("ESTADO_ACTIVO")
+  creadoEn      DateTime                  @default(now()) @map("FECHA_CREACION")
+  actualizadoEn DateTime                  @updatedAt @map("FECHA_ACTUALIZACION")
+
+  transacciones TransaccionPago[]
+
+  @@map("BANCOS_COOPERATIVAS")
+}
+
 model PlanSuscripcion {
   id                           String   @id @map("PLAN_SUSCRIPCION_ID")
   nombre                       String   @map("NOMBRE_PLAN")
@@ -565,6 +606,7 @@ model TransaccionPago {
   id                           String     @id @default(uuid()) @map("TRANSACCION_PAGO_ID")
   suscripcionUsuarioId         String     @map("SUSCRIPCION_USUARIO_ID")
   usuarioPagadorId             String     @map("USUARIO_PAGADOR_ID")
+  bancoCooperativaId           String?    @map("BANCO_COOPERATIVA_ID")
   entidadBancariaOrigen        String     @map("ENTIDAD_BANCARIA_ORIGEN")
   numeroComprobanteReferencia  String     @unique @map("NUMERO_COMPROBANTE_REFERENCIA")
   montoDolares                 Float      @map("MONTO_TRANSACCION_DOLARES")
@@ -578,8 +620,10 @@ model TransaccionPago {
   suscripcion            SuscripcionUsuario @relation(fields: [suscripcionUsuarioId], references: [id], onDelete: Cascade)
   usuarioPagador         Usuario            @relation("TransaccionesPagador", fields: [usuarioPagadorId], references: [id], onDelete: Cascade)
   administradorAprobador Usuario?           @relation("TransaccionesAdminAprobador", fields: [administradorAprobadorId], references: [id], onDelete: SetNull)
+  bancoCooperativa       BancoCooperativa?  @relation(fields: [bancoCooperativaId], references: [id], onDelete: SetNull)
 
   @@index([estado])
+  @@index([bancoCooperativaId])
   @@map("TRANSACCIONES_PAGOS")
 }
 

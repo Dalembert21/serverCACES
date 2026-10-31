@@ -13,6 +13,18 @@ import { OpcionPreguntaAdminDto } from './crear-pregunta-admin.dto.js';
 import { EstadoPregunta } from '@prisma/client';
 
 export class ActualizarPreguntaAdminDto {
+  @ApiProperty({
+    example: 'uuid-submodulo-cardiologia',
+    description: 'Identificador del submódulo académico',
+    required: false,
+  })
+  @IsOptional()
+  @IsString({ message: 'El identificador del submódulo debe ser texto' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  submoduloId?: string;
+
   @ApiProperty({ example: 'MED-INT-01', required: false })
   @IsOptional()
   @IsString({ message: 'El código de subárea debe ser texto' })

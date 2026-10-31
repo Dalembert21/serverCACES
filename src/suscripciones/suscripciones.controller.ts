@@ -28,6 +28,15 @@ export class SuscripcionesController {
     return this.suscripcionesService.listarPlanes();
   }
 
+  @Get('bancos-cooperativas')
+  @ApiOperation({
+    summary: 'Listar bancos y cooperativas disponibles',
+    description: 'Devuelve entidades financieras activas (Pichincha, Guayaquil, etc.) para combos de transferencia bancaria.',
+  })
+  async listarBancosCooperativas() {
+    return this.suscripcionesService.listarBancosCooperativas();
+  }
+
   @Get('mi-suscripcion')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')

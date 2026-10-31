@@ -45,9 +45,9 @@ async function main() {
     });
   }
 
-  // 2. Planes Comerciales y Departamentos Institucionales
-  console.log('2. Sembrando planes comerciales y departamentos...');
-  const { planes, departamentos } = obtenerDatosComerciales();
+  // 2. Planes Comerciales, Departamentos Institucionales y Entidades Financieras
+  console.log('2. Sembrando planes comerciales, departamentos y entidades bancarias...');
+  const { planes, departamentos, bancosCooperativas } = obtenerDatosComerciales();
   for (const plan of planes) {
     await prisma.planSuscripcion.upsert({
       where: { id: plan.id },
@@ -64,6 +64,14 @@ async function main() {
       create: dep,
     });
     departamentosCreados[dep.nombre] = d.id;
+  }
+
+  for (const entidad of bancosCooperativas) {
+    await prisma.bancoCooperativa.upsert({
+      where: { nombre: entidad.nombre },
+      update: { activo: entidad.activo, tipo: entidad.tipo },
+      create: entidad,
+    });
   }
 
   console.log('3. Sembrando usuarios del sistema...');
@@ -156,11 +164,12 @@ async function main() {
     }
   }
 
-  // 3. Catálogo Académico (Programas, Temarios, Competencias)
-  console.log('4. Sembrando catálogo académico oficial CACES...');
+  // 3. Catálogo Académico (Programas, Submódulos, Temarios, Competencias)
+  console.log('4. Sembrando catálogo académico oficial CACES y Submódulos...');
   const { programas } = obtenerDatosAcademicos();
 
   const subareasMap: Record<string, string> = {};
+  const submodulosMap: Record<string, string> = {};
 
   for (const prog of programas) {
     const programaDb = await prisma.programaAcademico.upsert({
@@ -177,6 +186,34 @@ async function main() {
         descripcion: prog.descripcion,
       },
     });
+
+    // Submódulos Académicos de Segundo Nivel
+    if (prog.submodulos && Array.isArray(prog.submodulos)) {
+      for (const sub of prog.submodulos) {
+        const submoduloDb = await prisma.submoduloAcademico.upsert({
+          where: {
+            programaAcademicoId_nombre: {
+              programaAcademicoId: programaDb.id,
+              nombre: sub.nombre,
+            },
+          },
+          update: {
+            descripcion: sub.descripcion,
+            orden: sub.orden || 0,
+            activo: true,
+          },
+          create: {
+            programaAcademicoId: programaDb.id,
+            nombre: sub.nombre,
+            descripcion: sub.descripcion,
+            orden: sub.orden || 0,
+            activo: true,
+          },
+        });
+        submodulosMap[sub.nombre] = submoduloDb.id;
+        submodulosMap[`${prog.codigo}_${sub.nombre}`] = submoduloDb.id;
+      }
+    }
 
     // Versión Temario Oficial 2026.1
     const temarioVersion = await prisma.temarioVersion.upsert({
@@ -298,19 +335,27 @@ async function main() {
 
   for (const item of todasLasPreguntas) {
     const subareaCompetenciaId = subareasMap[item.temaNombre];
-    if (!subareaCompetenciaId) {
+    const submoduloId = (item as any).submoduloNombre
+      ? submodulosMap[(item as any).submoduloNombre]
+      : null;
+
+    if (!subareaCompetenciaId && !submoduloId) {
       console.warn(
-        `Subárea no encontrada para tema de pregunta ${item.codigoPublico}: ${item.temaNombre}`,
+        `Subárea y submódulo no encontrados para pregunta ${item.codigoPublico}`,
       );
       continue;
     }
 
     const preguntaDb = await prisma.pregunta.upsert({
       where: { codigoPublico: item.codigoPublico },
-      update: { subareaCompetenciaId },
+      update: {
+        ...(subareaCompetenciaId ? { subareaCompetenciaId } : {}),
+        ...(submoduloId ? { submoduloId } : {}),
+      },
       create: {
         codigoPublico: item.codigoPublico,
         subareaCompetenciaId,
+        submoduloId,
         creadorId: adminId,
       },
     });
@@ -383,6 +428,51 @@ async function main() {
           esCorrecta: opc.esCorrecta,
           justificacion: opc.retroalimentacionEspecifica,
         },
+      });
+    }
+  }
+
+  // 5. Backfill de preguntas existentes en la base de datos sin submódulo asignado
+  console.log('6. Verificando y realizando backfill de preguntas sin submódulo...');
+  const preguntasSinSubmodulo = await prisma.pregunta.findMany({
+    where: { submoduloId: null },
+    include: {
+      subarea: {
+        include: {
+          areaAcademica: {
+            include: {
+              temarioVersion: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  for (const p of preguntasSinSubmodulo) {
+    if (!p.subarea) continue;
+    const progId = p.subarea.areaAcademica.temarioVersion.programaAcademicoId;
+    const nombreArea = p.subarea.areaAcademica.nombre;
+
+    // Buscar submódulo con nombre idéntico o parecido en ese programa
+    let submodulo = await prisma.submoduloAcademico.findFirst({
+      where: {
+        programaAcademicoId: progId,
+        nombre: { contains: nombreArea, mode: 'insensitive' },
+      },
+    });
+
+    if (!submodulo) {
+      // Fallback: primer submódulo del programa o crear uno general
+      submodulo = await prisma.submoduloAcademico.findFirst({
+        where: { programaAcademicoId: progId },
+      });
+    }
+
+    if (submodulo) {
+      await prisma.pregunta.update({
+        where: { id: p.id },
+        data: { submoduloId: submodulo.id },
       });
     }
   }
