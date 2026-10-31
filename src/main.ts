@@ -16,10 +16,13 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const puerto = configService.get<number>('app.puerto', 3000);
   const prefijo = configService.get<string>('app.prefijoApi', 'api/v1');
-  const corsOrigen = configService.get<string>(
+  const corsRaw = configService.get<string>(
     'app.corsOrigen',
     'http://localhost:4200',
   );
+  const corsOrigen = corsRaw.includes(',')
+    ? corsRaw.split(',').map((o) => o.trim())
+    : corsRaw;
 
   // Seguridad: Helmet
   app.use(helmet());

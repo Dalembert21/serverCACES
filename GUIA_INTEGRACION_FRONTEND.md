@@ -6,8 +6,10 @@ Esta documentación técnica está redactada para que el equipo de frontend (Ang
 
 ## 1. Configuración Global de la API
 
-* **URL Base de la API:** `http://localhost:3000/api/v1` (ajustable en `environment.ts`)
-* **Documentación Interactiva Swagger:** `http://localhost:3000/api/v1/docs`
+* **URL Base de Producción:** `https://apiaturitmo.dalpasoft.tech/api/v1`
+* **URL Base de Desarrollo Local:** `http://localhost:3000/api/v1`
+* **Documentación Interactiva Swagger (Producción):** `https://apiaturitmo.dalpasoft.tech/api/v1/docs`
+* **Documentación Interactiva Swagger (Local):** `http://localhost:3000/api/v1/docs`
 * **Cabeceras Generales Obligatorias:**
   * `Content-Type: application/json`
   * `Authorization: Bearer <tokenAcceso>` (para todas las rutas protegidas)
