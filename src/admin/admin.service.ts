@@ -1194,7 +1194,7 @@ export class AdminService {
           subarea: {
             areaAcademica: {
               temarioVersion: {
-                programaAcademico: {
+                programa: {
                   OR: [
                     { id: progLimpio },
                     { id: progLimpio.toUpperCase() },
@@ -1238,7 +1238,13 @@ export class AdminService {
         },
         subarea: {
           include: {
-            areaAcademica: true,
+            areaAcademica: {
+              include: {
+                temarioVersion: {
+                  include: { programa: true },
+                },
+              },
+            },
           },
         },
         versiones: {
@@ -1265,10 +1271,12 @@ export class AdminService {
         submoduloNombre: p.submodulo?.nombre || null,
         programaId:
           p.submodulo?.programaAcademicoId ||
-          p.subarea?.areaAcademica?.nombre ||
+          p.subarea?.areaAcademica?.temarioVersion?.programaAcademicoId ||
           null,
         programaNombre:
-          p.submodulo?.programa?.nombre || 'General',
+          p.submodulo?.programa?.nombre ||
+          p.subarea?.areaAcademica?.temarioVersion?.programa?.nombre ||
+          'General',
         areaId: p.subarea?.areaAcademicaId || null,
         areaNombre: p.subarea?.areaAcademica?.nombre || null,
         subareaCodigo: p.subarea?.codigoOficial || null,
