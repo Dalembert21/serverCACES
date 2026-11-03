@@ -57,23 +57,28 @@ export class CrearEstudianteAdminDto {
   @Matches(/^09\d{8}$/, { message: 'El teléfono celular debe tener 10 dígitos e iniciar con 09' })
   telefonoContacto?: string;
 
-  @ApiProperty({ example: 'MEDICINA', description: 'Código o ID de la carrera académica CACES' })
+  @ApiProperty({ example: 1, description: 'ID numérico o nombre de la carrera académica CACES' })
   @IsNotEmpty({ message: 'La carrera o programa es obligatorio' })
-  @IsString()
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim() : value,
+    typeof value === 'string' && value.trim() !== '' && !isNaN(Number(value))
+      ? Number(value)
+      : value,
   )
-  programaId: string;
+  programaId: number | string;
 
   @ApiProperty({
-    example: 'PLAN_PRO_MENSUAL',
-    description: 'Plan comercial inicial a asignar (ej. PLAN_PRO_MENSUAL, PLAN_GRATUITO_BASE)',
+    example: 2,
+    description: 'Plan comercial inicial a asignar (ID numérico o nombre)',
     required: false,
-    default: 'PLAN_GRATUITO_BASE',
+    default: 1,
   })
   @IsOptional()
-  @IsString()
-  planId?: string;
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' && value.trim() !== '' && !isNaN(Number(value))
+      ? Number(value)
+      : value,
+  )
+  planId?: number | string;
 
   @ApiProperty({ example: 30, description: 'Días de vigencia si se activa Plan Pro', required: false, default: 30 })
   @IsOptional()

@@ -12,15 +12,16 @@ import { EsTextoCoherente } from '../../common/index.js';
 
 export class CrearSubmoduloDto {
   @ApiProperty({
-    example: 'MEDICINA',
-    description: 'ID del módulo/programa académico al que pertenece el submódulo',
+    example: 1,
+    description: 'ID o referencia del módulo/programa académico al que pertenece el submódulo',
   })
-  @IsString({ message: 'El identificador del módulo debe ser texto' })
   @IsNotEmpty({ message: 'El identificador del módulo es obligatorio' })
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim().toUpperCase() : value,
+    typeof value === 'string' && value.trim() !== '' && !isNaN(Number(value))
+      ? Number(value)
+      : value,
   )
-  programaAcademicoId: string;
+  programaAcademicoId: number | string;
 
   @ApiProperty({
     example: 'Cardiología',

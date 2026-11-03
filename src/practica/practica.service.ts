@@ -48,11 +48,11 @@ export class PracticaService {
       .map((p) => {
         const version = p.versiones[0];
         const area = p.subarea?.areaAcademica;
-        const progCodigoRaw =
-          p.submodulo?.programaAcademicoId ||
-          area?.temarioVersion?.programaAcademicoId ||
+        const progIdNum =
+          p.submodulo?.programaAcademicoId ??
+          area?.temarioVersion?.programaAcademicoId ??
           '';
-        const progCodigo = progCodigoRaw.toLowerCase().replace('caces-', '').replace('prog-', '');
+        const progCodigo = String(progIdNum).toLowerCase();
 
         const multimedia = version.activosMultimedia[0];
         const referencia = version.referencias[0];

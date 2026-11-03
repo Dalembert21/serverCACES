@@ -16,15 +16,16 @@ import {
 
 export class DeclararPagoDto {
   @ApiProperty({
-    example: 'PLAN_SEMESTRAL_PRO',
-    description: 'Identificador del plan adquirido',
+    example: 2,
+    description: 'Identificador numérico del plan adquirido',
   })
-  @IsString({ message: 'El identificador del plan debe ser texto' })
   @IsNotEmpty({ message: 'El plan es obligatorio' })
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim() : value,
+    typeof value === 'string' && value.trim() !== '' && !isNaN(Number(value))
+      ? Number(value)
+      : value,
   )
-  planId: string;
+  planId: number | string;
 
   @ApiProperty({
     example: 'Banco Pichincha',

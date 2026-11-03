@@ -41,10 +41,14 @@ export class ActualizarEstudianteAdminDto {
   @IsString({ message: 'El teléfono debe ser texto' })
   telefonoContacto?: string;
 
-  @ApiProperty({ example: 'prog-medicina', required: false })
+  @ApiProperty({ example: 1, required: false, description: 'ID numérico o nombre de la carrera CACES' })
   @IsOptional()
-  @IsString({ message: 'El ID del programa académico debe ser texto' })
-  programaActivoId?: string;
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' && value.trim() !== '' && !isNaN(Number(value))
+      ? Number(value)
+      : value,
+  )
+  programaActivoId?: number | string;
 
   @ApiProperty({ example: true, required: false })
   @IsOptional()

@@ -38,7 +38,6 @@ async function main() {
       where: { nombre: rol.nombre },
       update: { descripcion: rol.descripcion },
       create: {
-        id: rol.nombre,
         nombre: rol.nombre,
         descripcion: rol.descripcion,
       },
@@ -145,17 +144,24 @@ async function main() {
       });
 
       if (!subExistente) {
-        await prisma.suscripcionUsuario.create({
-          data: {
-            usuarioId: usuarioDb.id,
-            planId: 'PLAN_GRATUITO_BASE',
-            estado: 'ACTIVA',
-            iniciaEn: new Date(),
-            expiraEn,
-            preguntasGratisConsumidas: 0,
-            simuladoresGratisConsumidos: 0,
-          },
+        const planBase = await prisma.planSuscripcion.findFirst({
+          where: { precioDolares: 0 },
+          orderBy: { id: 'asc' },
         });
+
+        if (planBase) {
+          await prisma.suscripcionUsuario.create({
+            data: {
+              usuarioId: usuarioDb.id,
+              planId: planBase.id,
+              estado: 'ACTIVA',
+              iniciaEn: new Date(),
+              expiraEn,
+              preguntasGratisConsumidas: 0,
+              simuladoresGratisConsumidos: 0,
+            },
+          });
+        }
       }
     }
   }
@@ -168,14 +174,14 @@ async function main() {
   const submodulosMap: Record<string, string> = {};
 
   for (const prog of programas) {
+    const nombreNormalizado = prog.nombre === 'Medicina Humana' ? 'Medicina' : prog.nombre;
     const programaDb = await prisma.programaAcademico.upsert({
-      where: { id: prog.codigo },
+      where: { nombre: nombreNormalizado },
       update: {
-        nombre: prog.nombre === 'Medicina Humana' ? 'Medicina' : prog.nombre,
+        nombre: nombreNormalizado,
       },
       create: {
-        id: prog.codigo,
-        nombre: prog.nombre === 'Medicina Humana' ? 'Medicina' : prog.nombre,
+        nombre: nombreNormalizado,
       },
     });
 

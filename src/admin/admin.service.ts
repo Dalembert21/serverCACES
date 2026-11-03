@@ -82,7 +82,7 @@ export class AdminService {
     return usuarios.map((u) => {
       const sub = u.suscripciones[0];
       const esPro =
-        sub && sub.estado === 'ACTIVA' && sub.planId !== 'PLAN_GRATUITO_BASE';
+        sub && sub.estado === 'ACTIVA' && Number(sub.plan?.precioDolares ?? 0) > 0;
       const estadoPlan: 'gratuito' | 'mensual_pro' | 'vencido' = esPro
         ? 'mensual_pro'
         : sub?.estado === 'VENCIDA'
@@ -160,7 +160,7 @@ export class AdminService {
 
     const sub = estudiante.suscripciones[0];
     const esPro =
-      sub && sub.estado === 'ACTIVA' && sub.planId !== 'PLAN_GRATUITO_BASE';
+      sub && sub.estado === 'ACTIVA' && Number(sub.plan?.precioDolares ?? 0) > 0;
     const estadoPlan = esPro
       ? 'mensual_pro'
       : sub?.estado === 'VENCIDA'
@@ -266,17 +266,18 @@ export class AdminService {
       );
     }
 
-    const progLimpio = dto.programaId.trim();
+    const progStr = String(dto.programaId || '').trim();
+    const progNum = Number(progStr);
     const programa = await this.prisma.programaAcademico.findFirst({
       where: {
         OR: [
-          { id: progLimpio },
-          { id: progLimpio.toUpperCase() },
-          { id: `caces-${progLimpio.toLowerCase().replace('prog-', '')}` },
+          ...(isNaN(progNum) ? [] : [{ id: progNum }]),
+          { nombre: { equals: progStr, mode: 'insensitive' } },
+          { nombre: { contains: progStr.replace(/^(prog-|caces-)/i, ''), mode: 'insensitive' } },
         ],
       },
     });
-    const programaActivoId = programa?.id || progLimpio;
+    const programaActivoId = programa?.id || null;
 
     const passwordPlano =
       dto.password?.trim() || `Caces${Math.floor(1000 + Math.random() * 9000)}!`;
@@ -285,14 +286,26 @@ export class AdminService {
 
     const nombreCompleto = `${dto.nombre.trim()} ${dto.apellido.trim()}`;
 
-    const planIdSeleccionado = dto.planId || 'PLAN_GRATUITO_BASE';
-    const planDb = await this.prisma.planSuscripcion.findUnique({
-      where: { id: planIdSeleccionado },
+    const planStr = String(dto.planId || '').trim();
+    const planNum = Number(planStr);
+    let planDb = await this.prisma.planSuscripcion.findFirst({
+      where: {
+        OR: [
+          ...(isNaN(planNum) ? [] : [{ id: planNum }]),
+          { nombre: { contains: planStr, mode: 'insensitive' } },
+        ],
+      },
     });
+    if (!planDb) {
+      planDb = await this.prisma.planSuscripcion.findFirst({
+        where: { precioDolares: 0 },
+        orderBy: { id: 'asc' },
+      });
+    }
 
     const esPlanPro = planDb
       ? Number(planDb.precioDolares) > 0
-      : planIdSeleccionado.toUpperCase().includes('PRO');
+      : planStr.toUpperCase().includes('PRO');
     const diasVigencia =
       dto.diasVigencia || (planDb?.duracionDiasVigencia ?? (esPlanPro ? 30 : 365));
 
@@ -323,17 +336,19 @@ export class AdminService {
         },
       });
 
-      await tx.suscripcionUsuario.create({
-        data: {
-          usuarioId: nuevo.id,
-          planId: planDb ? planDb.id : 'PLAN_GRATUITO_BASE',
-          estado: 'ACTIVA',
-          iniciaEn: new Date(),
-          expiraEn,
-          preguntasGratisConsumidas: 0,
-          simuladoresGratisConsumidos: 0,
-        },
-      });
+      if (planDb) {
+        await tx.suscripcionUsuario.create({
+          data: {
+            usuarioId: nuevo.id,
+            planId: planDb.id,
+            estado: 'ACTIVA',
+            iniciaEn: new Date(),
+            expiraEn,
+            preguntasGratisConsumidas: 0,
+            simuladoresGratisConsumidos: 0,
+          },
+        });
+      }
 
       return nuevo;
     });
@@ -417,8 +432,17 @@ export class AdminService {
     if (dto.cedula !== undefined) data.cedula = dto.cedula.trim();
     if (dto.telefonoContacto !== undefined)
       data.telefonoContacto = dto.telefonoContacto.trim();
-    if (dto.programaActivoId !== undefined)
-      data.programaActivoId = dto.programaActivoId;
+    if (dto.programaActivoId !== undefined) {
+      const progNum = Number(dto.programaActivoId);
+      if (!isNaN(progNum)) {
+        data.programaActivoId = progNum;
+      } else {
+        const prog = await this.prisma.programaAcademico.findFirst({
+          where: { nombre: { equals: String(dto.programaActivoId).trim(), mode: 'insensitive' } },
+        });
+        if (prog) data.programaActivoId = prog.id;
+      }
+    }
     if (dto.activo !== undefined) data.activo = dto.activo;
 
     await this.prisma.usuario.update({
@@ -479,13 +503,10 @@ export class AdminService {
     const expiraEn = new Date();
     expiraEn.setDate(expiraEn.getDate() + diasVigencia);
 
-    const planPro =
-      (await this.prisma.planSuscripcion.findFirst({
-        where: { id: 'PLAN_SEMESTRAL_PRO' },
-      })) ||
-      (await this.prisma.planSuscripcion.findFirst({
-        where: { precioDolares: { gt: 0 } },
-      }));
+    const planPro = await this.prisma.planSuscripcion.findFirst({
+      where: { precioDolares: { gt: 0 } },
+      orderBy: { precioDolares: 'asc' },
+    });
 
     if (!planPro) {
       throw new BadRequestException(
@@ -793,7 +814,7 @@ export class AdminService {
     }
 
     const prefijo = submodulo
-      ? `${submodulo.programaAcademicoId.slice(0, 3)}-${submodulo.nombre.slice(0, 4).toUpperCase().replace(/\s+/g, '')}`
+      ? `${(submodulo.programa?.nombre || 'MOD').slice(0, 3).toUpperCase()}-${submodulo.nombre.slice(0, 4).toUpperCase().replace(/\s+/g, '')}`
       : (dto.codigoSubarea || 'PREG').toUpperCase();
     const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
     const codigoPublico = `PREG-${prefijo}-${Date.now().toString().slice(-4)}${randomSuffix}`;
@@ -1181,12 +1202,13 @@ export class AdminService {
       where.subarea = { areaAcademicaId: filtros.areaId };
     } else if (filtros?.programaId) {
       const progLimpio = filtros.programaId.trim();
+      const progNum = Number(progLimpio);
       where.OR = [
         {
           submodulo: {
             OR: [
-              { programaAcademicoId: progLimpio },
-              { programaAcademicoId: progLimpio.toUpperCase() },
+              ...(isNaN(progNum) ? [] : [{ programaAcademicoId: progNum }]),
+              { programa: { nombre: { equals: progLimpio, mode: 'insensitive' } } },
             ],
           },
         },
@@ -1196,9 +1218,8 @@ export class AdminService {
               temarioVersion: {
                 programa: {
                   OR: [
-                    { id: progLimpio },
-                    { id: progLimpio.toUpperCase() },
-                    { id: `caces-${progLimpio.toLowerCase().replace('prog-', '')}` },
+                    ...(isNaN(progNum) ? [] : [{ id: progNum }]),
+                    { nombre: { equals: progLimpio, mode: 'insensitive' } },
                   ],
                 },
               },
@@ -1310,11 +1331,11 @@ export class AdminService {
     const wherePrograma: any = { activo: true };
     if (programaId) {
       const prog = programaId.trim();
+      const progNum = Number(prog);
       wherePrograma.OR = [
-        { id: prog },
-        { id: prog.toUpperCase() },
-        { id: `caces-${prog.toLowerCase().replace('prog-', '')}` },
+        ...(isNaN(progNum) ? [] : [{ id: progNum }]),
         { nombre: { equals: prog, mode: 'insensitive' } },
+        { nombre: { contains: prog.replace(/^(prog-|caces-)/i, ''), mode: 'insensitive' } },
       ];
     }
 
@@ -1422,9 +1443,15 @@ export class AdminService {
   /**
    * Consulta el detalle de un plan comercial
    */
-  async obtenerPlanAdmin(id: string) {
-    const plan = await this.prisma.planSuscripcion.findUnique({
-      where: { id },
+  async obtenerPlanAdmin(id: string | number) {
+    const numId = Number(id);
+    const plan = await this.prisma.planSuscripcion.findFirst({
+      where: {
+        OR: [
+          ...(isNaN(numId) ? [] : [{ id: numId }]),
+          { nombre: { equals: String(id).trim(), mode: 'insensitive' } },
+        ],
+      },
       include: {
         _count: {
           select: { suscripciones: true },
@@ -1439,18 +1466,21 @@ export class AdminService {
    * Crea un nuevo plan comercial de suscripción
    */
   async crearPlan(dto: CrearPlanDto) {
-    const existe = await this.prisma.planSuscripcion.findUnique({
-      where: { id: dto.id },
-    });
-    if (existe) {
-      throw new ConflictException(
-        `Ya existe un plan con el identificador "${dto.id}"`,
-      );
+    const numId = dto.id ? Number(dto.id) : undefined;
+    if (numId !== undefined) {
+      const existe = await this.prisma.planSuscripcion.findUnique({
+        where: { id: numId },
+      });
+      if (existe) {
+        throw new ConflictException(
+          `Ya existe un plan con el identificador "${dto.id}"`,
+        );
+      }
     }
 
     return this.prisma.planSuscripcion.create({
       data: {
-        id: dto.id,
+        ...(numId !== undefined ? { id: numId } : {}),
         nombre: dto.nombre,
         descripcion: dto.descripcion || null,
         precioDolares: new Prisma.Decimal(dto.precioDolares),
@@ -1466,8 +1496,16 @@ export class AdminService {
   /**
    * Actualiza precios, días o beneficios de un plan
    */
-  async actualizarPlan(id: string, dto: ActualizarPlanDto) {
-    const plan = await this.prisma.planSuscripcion.findUnique({ where: { id } });
+  async actualizarPlan(id: string | number, dto: ActualizarPlanDto) {
+    const numId = Number(id);
+    const plan = await this.prisma.planSuscripcion.findFirst({
+      where: {
+        OR: [
+          ...(isNaN(numId) ? [] : [{ id: numId }]),
+          { nombre: { equals: String(id).trim(), mode: 'insensitive' } },
+        ],
+      },
+    });
     if (!plan) throw new NotFoundException('Plan no encontrado');
 
     const dataPlan: any = { ...dto };
@@ -1476,7 +1514,7 @@ export class AdminService {
     }
 
     return this.prisma.planSuscripcion.update({
-      where: { id },
+      where: { id: plan.id },
       data: dataPlan,
     });
   }
@@ -1484,31 +1522,37 @@ export class AdminService {
   /**
    * Elimina o desactiva un plan comercial
    */
-  async eliminarPlan(id: string) {
-    const plan = await this.prisma.planSuscripcion.findUnique({
-      where: { id },
+  async eliminarPlan(id: string | number) {
+    const numId = Number(id);
+    const plan = await this.prisma.planSuscripcion.findFirst({
+      where: {
+        OR: [
+          ...(isNaN(numId) ? [] : [{ id: numId }]),
+          { nombre: { equals: String(id).trim(), mode: 'insensitive' } },
+        ],
+      },
       include: { _count: { select: { suscripciones: true } } },
     });
     if (!plan) throw new NotFoundException('Plan no encontrado');
 
     if (plan._count.suscripciones > 0) {
       await this.prisma.planSuscripcion.update({
-        where: { id },
+        where: { id: plan.id },
         data: { activo: false },
       });
       return {
         mensaje:
           'El plan posee suscripciones activas asociadas. Se ha desactivado para nuevas compras.',
         accion: 'DESACTIVADO',
-        id,
+        id: plan.id,
       };
     }
 
-    await this.prisma.planSuscripcion.delete({ where: { id } });
+    await this.prisma.planSuscripcion.delete({ where: { id: plan.id } });
     return {
       mensaje: 'Plan eliminado definitivamente de la base de datos',
       accion: 'ELIMINADO',
-      id,
+      id: plan.id,
     };
   }
 
@@ -1574,12 +1618,12 @@ export class AdminService {
    */
   async crearProgramaAcademico(dto: CrearProgramaDto) {
     const nombreNormalizado = dto.nombre.trim();
-    const idNormalizado = dto.id?.trim();
+    const idNum = typeof dto.id === 'number' ? dto.id : undefined;
 
     const existeId = await this.prisma.programaAcademico.findFirst({
       where: {
         OR: [
-          ...(idNormalizado ? [{ id: idNormalizado }, { id: idNormalizado.toUpperCase() }] : []),
+          ...(idNum !== undefined ? [{ id: idNum }] : []),
           { nombre: { equals: nombreNormalizado, mode: 'insensitive' } },
         ],
       },
@@ -1592,7 +1636,7 @@ export class AdminService {
     return this.prisma.$transaction(async (tx) => {
       const programa = await tx.programaAcademico.create({
         data: {
-          ...(idNormalizado ? { id: idNormalizado } : {}),
+          ...(idNum !== undefined ? { id: idNum } : {}),
           nombre: nombreNormalizado,
           activo: dto.activo ?? true,
         },
@@ -1641,14 +1685,13 @@ export class AdminService {
   /**
    * Actualiza el programa académico y sus parámetros de examen
    */
-  async actualizarProgramaAcademico(id: string, dto: ActualizarProgramaDto) {
+  async actualizarProgramaAcademico(id: string | number, dto: ActualizarProgramaDto) {
+    const numId = Number(id);
     const programa = await this.prisma.programaAcademico.findFirst({
       where: {
         OR: [
-          { id },
-          { id: id.toUpperCase() },
-          { id: id.toLowerCase() },
-          { nombre: { equals: id, mode: 'insensitive' } },
+          ...(isNaN(numId) ? [] : [{ id: numId }]),
+          { nombre: { equals: String(id).trim(), mode: 'insensitive' } },
         ],
       },
     });
@@ -1705,14 +1748,13 @@ export class AdminService {
   /**
    * Desactiva un programa académico
    */
-  async eliminarProgramaAcademico(id: string) {
+  async eliminarProgramaAcademico(id: string | number) {
+    const numId = Number(id);
     const programa = await this.prisma.programaAcademico.findFirst({
       where: {
         OR: [
-          { id },
-          { id: id.toUpperCase() },
-          { id: id.toLowerCase() },
-          { nombre: { equals: id, mode: 'insensitive' } },
+          ...(isNaN(numId) ? [] : [{ id: numId }]),
+          { nombre: { equals: String(id).trim(), mode: 'insensitive' } },
         ],
       },
     });
@@ -1740,11 +1782,13 @@ export class AdminService {
    * Crea un área temática en el temario activo de una carrera
    */
   async crearAreaAcademica(dto: CrearAreaDto) {
+    const progNum = Number(dto.programaId);
     const temario = await this.prisma.temarioVersion.findFirst({
       where: {
         OR: [
-          { programaAcademicoId: dto.programaId, activo: true },
+          ...(isNaN(progNum) ? [] : [{ programaAcademicoId: progNum, activo: true }]),
           { id: dto.programaId },
+          { programa: { nombre: { equals: dto.programaId.trim(), mode: 'insensitive' } } },
         ],
       },
       orderBy: { creadoEn: 'desc' },
@@ -1903,12 +1947,13 @@ export class AdminService {
    * Crea un nuevo submódulo académico validando unicidad por módulo
    */
   async crearSubmodulo(dto: CrearSubmoduloDto) {
+    const progIdNum = Number(dto.programaAcademicoId);
+    const progIdStr = String(dto.programaAcademicoId).trim();
     const programa = await this.prisma.programaAcademico.findFirst({
       where: {
         OR: [
-          { id: dto.programaAcademicoId },
-          { id: dto.programaAcademicoId.toUpperCase() },
-          { nombre: { equals: dto.programaAcademicoId, mode: 'insensitive' } },
+          ...(isNaN(progIdNum) ? [] : [{ id: progIdNum }]),
+          { nombre: { equals: progIdStr, mode: 'insensitive' } },
         ],
       },
     });

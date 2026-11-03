@@ -87,8 +87,14 @@ export class SuscripcionesService {
    * Registra un comprobante de transferencia bancaria para verificación de tesorería
    */
   async declararPago(dto: DeclararPagoDto, usuarioId: string) {
-    const plan = await this.prisma.planSuscripcion.findUnique({
-      where: { id: dto.planId },
+    const planIdNum = Number(dto.planId);
+    const plan = await this.prisma.planSuscripcion.findFirst({
+      where: {
+        OR: [
+          ...(isNaN(planIdNum) ? [] : [{ id: planIdNum }]),
+          { nombre: { equals: String(dto.planId).trim(), mode: 'insensitive' } },
+        ],
+      },
     });
 
     if (!plan) {

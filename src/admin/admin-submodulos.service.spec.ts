@@ -7,7 +7,7 @@ describe('AdminService - Gestión de Submódulos Académicos y Preguntas', () =>
   let service: AdminService;
   let prisma: PrismaService;
 
-  const mockPrismaService = {
+  const mockPrismaService: any = {
     submoduloAcademico: {
       findMany: jest.fn(),
       findUnique: jest.fn(),

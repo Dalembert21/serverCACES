@@ -11,13 +11,13 @@ import {
 import { EsTextoCoherente } from '../../common/index.js';
 
 export class CrearProgramaDto {
-  @ApiProperty({ example: 'prog-odontologia', description: 'ID identificador del programa (opcional, generado automáticamente si no se envía)', required: false })
+  @ApiProperty({ example: 1, description: 'ID numérico identificador del programa (opcional, generado automáticamente si no se envía)', required: false })
   @IsOptional()
-  @IsString({ message: 'El ID del programa debe ser texto' })
+  @IsNumber({}, { message: 'El ID del programa debe ser un número' })
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim().toUpperCase() : value,
+    typeof value === 'string' && value.trim() !== '' && !isNaN(Number(value)) ? Number(value) : value,
   )
-  id?: string;
+  id?: number;
 
   @ApiProperty({ example: 'Odontología', description: 'Nombre oficial de la carrera / módulo' })
   @IsString({ message: 'El nombre debe ser texto' })

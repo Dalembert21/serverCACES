@@ -12,14 +12,15 @@ import {
 import { EsTextoCoherente } from '../../common/index.js';
 
 export class CrearPlanDto {
-  @ApiProperty({ example: 'PLAN_SEMESTRAL_PRO', description: 'Código único identificador del plan' })
-  @IsString({ message: 'El ID del plan debe ser texto' })
-  @IsNotEmpty({ message: 'El ID del plan es obligatorio' })
-  @Matches(/^[A-Z0-9_-]{3,35}$/, { message: 'El ID del plan debe contener solo letras mayúsculas, números o guiones (sin puntos ni símbolos incoherentes)' })
+  @ApiProperty({ example: 1, description: 'ID numérico del plan (opcional, autoincremental si no se envía)', required: false })
+  @IsOptional()
+  @IsNumber({}, { message: 'El ID del plan debe ser un número' })
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim().toUpperCase() : value,
+    typeof value === 'string' && value.trim() !== '' && !isNaN(Number(value))
+      ? Number(value)
+      : value,
   )
-  id: string;
+  id?: number;
 
   @ApiProperty({ example: 'Plan Semestral Pro', description: 'Nombre comercial del plan' })
   @IsString({ message: 'El nombre debe ser texto' })

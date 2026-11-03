@@ -17,7 +17,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
   const admin1Id = 'ADMIN_1_' + Date.now();
   const admin2Id = 'ADMIN_2_' + Date.now();
   const estudianteId = 'ESTUDIANTE_' + Date.now();
-  const testModuleId = 'MOD_AUDIT_' + Date.now();
+  const testModuleId = Math.floor(100000 + Math.random() * 800000);
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -64,7 +64,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
     // Limpieza y desactivación de datos de prueba
     try {
       await prisma.programaAcademico.deleteMany({
-        where: { id: { startsWith: 'MOD_AUDIT_' } },
+        where: { nombre: { startsWith: 'MOD_AUDIT_' } },
       });
       await prisma.usuario.updateMany({
         where: { id: { in: [admin1Id, admin2Id, estudianteId] } },
@@ -107,7 +107,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
     // Esperar registro asíncrono/trigger de auditoría en PostgreSQL
     const trazabilidad = await auditoriaService.consultarTrazabilidadRegistro(
       'PROGRAMAS_ACADEMICOS',
-      testModuleId,
+      String(testModuleId),
     );
 
     expect(trazabilidad).toBeDefined();
@@ -149,7 +149,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
     // Consultar el historial completo reconstruido
     const trazabilidad = await auditoriaService.consultarTrazabilidadRegistro(
       'PROGRAMAS_ACADEMICOS',
-      testModuleId,
+      String(testModuleId),
     );
 
     expect(trazabilidad.quienCreo.usuarioId).toBe(admin1Id);
@@ -195,7 +195,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
   // PRUEBA 4: ELIMINACIÓN Y TRAZABILIDAD DE DELETE
   // ============================================================================
   it('Prueba 4: Eliminación - Se elimina un registro y se conserva la trazabilidad del DELETE y usuario responsable', async () => {
-    const tempModuleId = 'MOD_DELETE_' + Date.now();
+    const tempModuleId = Math.floor(600000 + Math.random() * 800000);
 
     // Crear registro temporal
     await auditContextService.runWithContext(
@@ -204,7 +204,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
         return prisma.programaAcademico.create({
           data: {
             id: tempModuleId,
-            nombre: 'Módulo Temporal para Eliminación',
+            nombre: 'Módulo Temporal para Eliminación ' + tempModuleId,
           },
         });
       },
@@ -223,7 +223,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
     // Verificar en la auditoría que el DELETE fue registrado
     const trazabilidad = await auditoriaService.consultarTrazabilidadRegistro(
       'PROGRAMAS_ACADEMICOS',
-      tempModuleId,
+      String(tempModuleId),
     );
 
     expect(trazabilidad.estaEliminado).toBe(true);
@@ -237,7 +237,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
   // PRUEBA 5: PROCESOS AUTOMÁTICOS
   // ============================================================================
   it('Prueba 5: Procesos automáticos - Operación ejecutada sin usuario autenticado se identifica como PROCESO_AUTOMATICO / SISTEMA', async () => {
-    const cronModuleId = 'MOD_CRON_' + Date.now();
+    const cronModuleId = Math.floor(700000 + Math.random() * 800000);
 
     const record = await auditContextService.runWithContext(
       {
@@ -250,7 +250,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
         return prisma.programaAcademico.create({
           data: {
             id: cronModuleId,
-            nombre: 'Módulo Sincronizado por Cron',
+            nombre: 'Módulo Sincronizado por Cron ' + cronModuleId,
           },
         });
       },
@@ -260,7 +260,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
 
     const trazabilidad = await auditoriaService.consultarTrazabilidadRegistro(
       'PROGRAMAS_ACADEMICOS',
-      cronModuleId,
+      String(cronModuleId),
     );
 
     expect(['PROCESO_AUTOMATICO', 'SISTEMA']).toContain(
@@ -273,13 +273,13 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
   // PRUEBA 6: CONSISTENCIA TRANSACCIONAL
   // ============================================================================
   it('Prueba 6: Transacciones - La modificación de negocio y el historial se ejecutan de manera atómica y consistente', async () => {
-    const txModuleId = 'MOD_TX_' + Date.now();
+    const txModuleId = Math.floor(800000 + Math.random() * 800000);
 
     await prisma.$transaction(async (tx) => {
       await tx.programaAcademico.create({
         data: {
           id: txModuleId,
-          nombre: 'Módulo en Transacción',
+          nombre: 'Módulo en Transacción ' + txModuleId,
           creadoPorId: admin1Id,
         },
       });
@@ -287,13 +287,13 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
       // Modificación dentro de la misma transacción
       await tx.programaAcademico.update({
         where: { id: txModuleId },
-        data: { nombre: 'Módulo en Transacción Actualizado', modificadoPorId: admin2Id },
+        data: { nombre: 'Módulo en Transacción Actualizado ' + txModuleId, modificadoPorId: admin2Id },
       });
     });
 
     const trazabilidad = await auditoriaService.consultarTrazabilidadRegistro(
       'PROGRAMAS_ACADEMICOS',
-      txModuleId,
+      String(txModuleId),
     );
 
     expect(trazabilidad.lineaDeTiempo.length).toBeGreaterThanOrEqual(2);
@@ -305,17 +305,16 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
   // PRUEBA 7: OPERACIONES MASIVAS
   // ============================================================================
   it('Prueba 7: Operaciones masivas - Actualización masiva conserva modificadoPor y trazabilidad para todos los registros', async () => {
-    const batchPrefix = 'BATCH_' + Date.now();
-    const id1 = `MOD_${batchPrefix}_1`;
-    const id2 = `MOD_${batchPrefix}_2`;
+    const id1 = Math.floor(900000 + Math.random() * 800000);
+    const id2 = Math.floor(1000000 + Math.random() * 800000);
 
     await auditContextService.runWithContext(
       { usuarioId: admin1Id, tipoActor: 'USUARIO' },
       async () => {
         await prisma.programaAcademico.createMany({
           data: [
-            { id: id1, nombre: 'Batch Item 1' },
-            { id: id2, nombre: 'Batch Item 2' },
+            { id: id1, nombre: 'Batch Item ' + id1 },
+            { id: id2, nombre: 'Batch Item ' + id2 },
           ],
         });
       },
