@@ -28,6 +28,9 @@ export class CrearDepartamentoDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
+  @EsTextoCoherente(5, {
+    message: 'La descripción debe ser coherente y tener al menos 5 caracteres',
+  })
   descripcion?: string;
 
   @ApiPropertyOptional({

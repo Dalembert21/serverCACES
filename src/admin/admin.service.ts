@@ -1513,30 +1513,93 @@ export class AdminService {
   // ============================================================================
 
   /**
+   * Lista todos los programas académicos registrados (activos e inactivos)
+   * con sus submódulos y conteos reales desde la base de datos.
+   */
+  async listarProgramasAcademicos() {
+    const programas = await this.prisma.programaAcademico.findMany({
+      include: {
+        submodulos: {
+          orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+          include: {
+            _count: {
+              select: { preguntas: true },
+            },
+          },
+        },
+        configuracionesSimulador: {
+          orderBy: { totalPreguntas: 'desc' },
+        },
+        _count: {
+          select: {
+            submodulos: true,
+          },
+        },
+      },
+      orderBy: { creadoEn: 'asc' },
+    });
+
+    return programas.map((prog) => {
+      const totalPreguntas = prog.submodulos.reduce(
+        (acum, s) => acum + (s._count?.preguntas ?? 0),
+        0,
+      );
+      const codigoCorto = prog.codigoOficialCaces
+        ? prog.codigoOficialCaces.replace(/^CACES-/, '')
+        : prog.id.slice(0, 4).toUpperCase();
+
+      return {
+        id: prog.id,
+        codigoOficialCaces: prog.codigoOficialCaces,
+        codigoCorto,
+        codigoBackend: prog.id,
+        nombre: prog.nombre,
+        descripcion: prog.descripcion || '',
+        activo: prog.activo,
+        creadoEn: prog.creadoEn,
+        totalSubmodulos: prog._count?.submodulos ?? prog.submodulos.length,
+        totalPreguntas,
+        submodulos: prog.submodulos.map((s) => ({
+          id: s.id,
+          programaId: s.programaAcademicoId,
+          nombre: s.nombre,
+          descripcion: s.descripcion,
+          orden: s.orden,
+          activo: s.activo,
+          totalPreguntas: s._count?.preguntas ?? 0,
+        })),
+      };
+    });
+  }
+
+  /**
    * Registra una nueva carrera CACES con su temario y configuración oficial de simulacro
    */
   async crearProgramaAcademico(dto: CrearProgramaDto) {
-    const existeId = await this.prisma.programaAcademico.findUnique({
-      where: { id: dto.id },
+    const idNormalizado = dto.id.trim();
+    const codigoNormalizado = dto.codigoOficialCaces.trim().toUpperCase();
+
+    const existeId = await this.prisma.programaAcademico.findFirst({
+      where: {
+        OR: [
+          { id: idNormalizado },
+          { id: idNormalizado.toUpperCase() },
+          { codigoOficialCaces: codigoNormalizado },
+        ],
+      },
     });
     if (existeId)
-      throw new ConflictException(`El ID ${dto.id} ya se encuentra registrado`);
-
-    const existeCodigo = await this.prisma.programaAcademico.findUnique({
-      where: { codigoOficialCaces: dto.codigoOficialCaces },
-    });
-    if (existeCodigo)
       throw new ConflictException(
-        `El código oficial CACES ${dto.codigoOficialCaces} ya existe`,
+        `Ya existe un programa académico con el ID "${dto.id}" o código "${dto.codigoOficialCaces}"`,
       );
 
     return this.prisma.$transaction(async (tx) => {
       const programa = await tx.programaAcademico.create({
         data: {
-          id: dto.id,
-          codigoOficialCaces: dto.codigoOficialCaces,
-          nombre: dto.nombre,
-          descripcion: dto.descripcion || null,
+          id: idNormalizado,
+          codigoOficialCaces: codigoNormalizado,
+          nombre: dto.nombre.trim(),
+          descripcion: dto.descripcion?.trim() || null,
           activo: dto.activo ?? true,
         },
       });
@@ -1552,7 +1615,7 @@ export class AdminService {
       await tx.configuracionSimulador.create({
         data: {
           programaAcademicoId: programa.id,
-          titulo: `Simulacro Oficial CACES - ${dto.nombre}`,
+          titulo: `Simulacro Oficial CACES - ${dto.nombre.trim()}`,
           duracionMinutos: dto.duracionMinutos || 180,
           totalPreguntas: dto.totalPreguntas || 120,
           notaMinimaAprobacion: dto.notaMinimaAprobacion || 70,
@@ -1561,10 +1624,22 @@ export class AdminService {
         },
       });
 
+      // Crear un submódulo inicial general para que inmediatamente admita preguntas
+      const subGeneral = await tx.submoduloAcademico.create({
+        data: {
+          programaAcademicoId: programa.id,
+          nombre: `${dto.nombre.trim()} General`,
+          descripcion: `Submódulo general y fundamentos de ${dto.nombre.trim()}`,
+          orden: 1,
+          activo: true,
+        },
+      });
+
       return {
         mensaje: 'Programa académico y simulador oficial creados exitosamente',
         programa,
         temarioId: temario.id,
+        submoduloInicialId: subGeneral.id,
       };
     });
   }
@@ -1573,23 +1648,33 @@ export class AdminService {
    * Actualiza el programa académico y sus parámetros de examen
    */
   async actualizarProgramaAcademico(id: string, dto: ActualizarProgramaDto) {
-    const programa = await this.prisma.programaAcademico.findUnique({
-      where: { id },
+    const programa = await this.prisma.programaAcademico.findFirst({
+      where: {
+        OR: [
+          { id },
+          { id: id.toUpperCase() },
+          { id: id.toLowerCase() },
+          { codigoOficialCaces: id },
+          { codigoOficialCaces: id.toUpperCase() },
+        ],
+      },
     });
     if (!programa)
       throw new NotFoundException('Programa académico no encontrado');
 
     const data: any = {};
-    if (dto.nombre !== undefined) data.nombre = dto.nombre;
+    if (dto.nombre !== undefined) data.nombre = dto.nombre.trim();
     if (dto.codigoOficialCaces !== undefined)
-      data.codigoOficialCaces = dto.codigoOficialCaces;
-    if (dto.descripcion !== undefined) data.descripcion = dto.descripcion;
+      data.codigoOficialCaces = dto.codigoOficialCaces.trim().toUpperCase();
+    if (dto.descripcion !== undefined)
+      data.descripcion = dto.descripcion?.trim() || null;
     if (dto.activo !== undefined) data.activo = dto.activo;
 
     return this.prisma.$transaction(async (tx) => {
+      let programaActualizado = programa;
       if (Object.keys(data).length > 0) {
-        await tx.programaAcademico.update({
-          where: { id },
+        programaActualizado = await tx.programaAcademico.update({
+          where: { id: programa.id },
           data,
         });
       }
@@ -1600,7 +1685,7 @@ export class AdminService {
         dto.notaMinimaAprobacion
       ) {
         const config = await tx.configuracionSimulador.findFirst({
-          where: { programaAcademicoId: id, modalidad: 'SIMULACRO_OFICIAL' },
+          where: { programaAcademicoId: programa.id, modalidad: 'SIMULACRO_OFICIAL' },
         });
         if (config) {
           await tx.configuracionSimulador.update({
@@ -1622,7 +1707,8 @@ export class AdminService {
 
       return {
         mensaje: 'Programa académico actualizado exitosamente',
-        id,
+        id: programa.id,
+        programa: programaActualizado,
       };
     });
   }
@@ -1631,19 +1717,32 @@ export class AdminService {
    * Desactiva un programa académico
    */
   async eliminarProgramaAcademico(id: string) {
-    const programa = await this.prisma.programaAcademico.findUnique({
-      where: { id },
+    const programa = await this.prisma.programaAcademico.findFirst({
+      where: {
+        OR: [
+          { id },
+          { id: id.toUpperCase() },
+          { id: id.toLowerCase() },
+          { codigoOficialCaces: id },
+        ],
+      },
     });
-    if (!programa) throw new NotFoundException('Programa no encontrado');
+    if (!programa) throw new NotFoundException('Programa académico no encontrado');
 
-    await this.prisma.programaAcademico.update({
-      where: { id },
-      data: { activo: false },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.programaAcademico.update({
+        where: { id: programa.id },
+        data: { activo: false },
+      });
+      await tx.submoduloAcademico.updateMany({
+        where: { programaAcademicoId: programa.id },
+        data: { activo: false },
+      });
     });
 
     return {
-      mensaje: 'Programa académico desactivado correctamente',
-      id,
+      mensaje: 'Programa académico y submódulos suspendidos correctamente',
+      id: programa.id,
       activo: false,
     };
   }

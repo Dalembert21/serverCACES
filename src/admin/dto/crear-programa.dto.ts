@@ -15,7 +15,7 @@ export class CrearProgramaDto {
   @IsString({ message: 'El ID del programa debe ser texto' })
   @IsNotEmpty({ message: 'El ID del programa es obligatorio' })
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim().toLowerCase() : value,
+    typeof value === 'string' ? value.trim().toUpperCase() : value,
   )
   id: string;
 
