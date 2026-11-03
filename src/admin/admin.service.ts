@@ -10,6 +10,7 @@ import {
   DificultadPregunta,
   EstadoPago,
   EstadoPregunta,
+  Prisma,
   RolNombre,
 } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
@@ -290,7 +291,7 @@ export class AdminService {
     });
 
     const esPlanPro = planDb
-      ? planDb.precioDolares > 0
+      ? Number(planDb.precioDolares) > 0
       : planIdSeleccionado.toUpperCase().includes('PRO');
     const diasVigencia =
       dto.diasVigencia || (planDb?.duracionDiasVigencia ?? (esPlanPro ? 30 : 365));
@@ -308,7 +309,6 @@ export class AdminService {
           nombreCompleto,
           telefonoContacto: dto.telefonoContacto?.trim() || null,
           contrasenaHash,
-          rol: 'estudiante',
           programaActivoId,
           proveedorAuth: 'local',
           correoVerificado: true,
@@ -520,7 +520,7 @@ export class AdminService {
           bancoCooperativaId: bancoDb?.id || null,
           entidadBancariaOrigen: nombreEntidad,
           numeroComprobanteReferencia: ref,
-          montoDolares: dto.monto ?? planPro.precioDolares,
+          montoDolares: dto.monto !== undefined ? new Prisma.Decimal(dto.monto) : planPro.precioDolares,
           estado: 'APROBADA',
           administradorAprobadorId: operadorId || null,
           fechaPagoDeclarada: new Date(),
@@ -586,7 +586,7 @@ export class AdminService {
       estudianteCedula: t.usuarioPagador.cedula || 'Sin registrar',
       planId: t.suscripcion.planId,
       planNombre: t.suscripcion.plan.nombre,
-      montoDolares: t.montoDolares,
+      montoDolares: Number(t.montoDolares),
       entidadBancariaOrigen: t.entidadBancariaOrigen,
       numeroComprobanteReferencia: t.numeroComprobanteReferencia,
       urlFotoComprobante: t.urlFotoComprobante,
@@ -629,10 +629,10 @@ export class AdminService {
       plan: {
         id: transaccion.suscripcion.plan.id,
         nombre: transaccion.suscripcion.plan.nombre,
-        precioOficial: transaccion.suscripcion.plan.precioDolares,
+        precioOficial: Number(transaccion.suscripcion.plan.precioDolares),
         duracionDias: transaccion.suscripcion.plan.duracionDiasVigencia,
       },
-      montoDeclarado: transaccion.montoDolares,
+      montoDeclarado: Number(transaccion.montoDolares),
       entidadBancariaOrigen: transaccion.entidadBancariaOrigen,
       numeroComprobanteReferencia: transaccion.numeroComprobanteReferencia,
       urlFotoComprobante: transaccion.urlFotoComprobante,
@@ -693,11 +693,11 @@ export class AdminService {
     });
 
     this.logger.log(
-      `Pago aprobado por ${adminId} para estudiante ${transaccion.usuarioPagador.correo} ($${transaccion.montoDolares} USD)`,
+      `Pago aprobado por ${adminId} para estudiante ${transaccion.usuarioPagador.correo} ($${Number(transaccion.montoDolares)} USD)`,
     );
 
     return {
-      mensaje: `Pago de $${transaccion.montoDolares} USD aprobado exitosamente para ${transaccion.usuarioPagador.nombreCompleto}`,
+      mensaje: `Pago de $${Number(transaccion.montoDolares)} USD aprobado exitosamente para ${transaccion.usuarioPagador.nombreCompleto}`,
       transaccionId,
       suscripcionId: transaccion.suscripcionUsuarioId,
       expiraEn: expiraEn.toISOString(),
@@ -1314,7 +1314,7 @@ export class AdminService {
         { id: prog },
         { id: prog.toUpperCase() },
         { id: `caces-${prog.toLowerCase().replace('prog-', '')}` },
-        { codigoOficialCaces: prog },
+        { nombre: { equals: prog, mode: 'insensitive' } },
       ];
     }
 
@@ -1362,7 +1362,6 @@ export class AdminService {
       return {
         programaId: prog.id,
         nombrePrograma: prog.nombre,
-        codigoOficialCaces: prog.codigoOficialCaces,
         totalAreas: areas.length,
         areas,
       };
@@ -1454,7 +1453,7 @@ export class AdminService {
         id: dto.id,
         nombre: dto.nombre,
         descripcion: dto.descripcion || null,
-        precioDolares: dto.precioDolares,
+        precioDolares: new Prisma.Decimal(dto.precioDolares),
         duracionDiasVigencia: dto.duracionDiasVigencia,
         limitePreguntasGratis: dto.limitePreguntasGratis ?? 20,
         accesoSimuladoresIlimitados: dto.accesoSimuladoresIlimitados ?? false,
@@ -1471,9 +1470,14 @@ export class AdminService {
     const plan = await this.prisma.planSuscripcion.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException('Plan no encontrado');
 
+    const dataPlan: any = { ...dto };
+    if (dto.precioDolares !== undefined) {
+      dataPlan.precioDolares = new Prisma.Decimal(dto.precioDolares);
+    }
+
     return this.prisma.planSuscripcion.update({
       where: { id },
-      data: dto,
+      data: dataPlan,
     });
   }
 
@@ -1544,17 +1548,10 @@ export class AdminService {
         (acum, s) => acum + (s._count?.preguntas ?? 0),
         0,
       );
-      const codigoCorto = prog.codigoOficialCaces
-        ? prog.codigoOficialCaces.replace(/^CACES-/, '')
-        : prog.id.slice(0, 4).toUpperCase();
 
       return {
         id: prog.id,
-        codigoOficialCaces: prog.codigoOficialCaces,
-        codigoCorto,
-        codigoBackend: prog.id,
         nombre: prog.nombre,
-        descripcion: prog.descripcion || '',
         activo: prog.activo,
         creadoEn: prog.creadoEn,
         totalSubmodulos: prog._count?.submodulos ?? prog.submodulos.length,
@@ -1576,30 +1573,27 @@ export class AdminService {
    * Registra una nueva carrera CACES con su temario y configuración oficial de simulacro
    */
   async crearProgramaAcademico(dto: CrearProgramaDto) {
-    const idNormalizado = dto.id.trim();
-    const codigoNormalizado = dto.codigoOficialCaces.trim().toUpperCase();
+    const nombreNormalizado = dto.nombre.trim();
+    const idNormalizado = dto.id?.trim();
 
     const existeId = await this.prisma.programaAcademico.findFirst({
       where: {
         OR: [
-          { id: idNormalizado },
-          { id: idNormalizado.toUpperCase() },
-          { codigoOficialCaces: codigoNormalizado },
+          ...(idNormalizado ? [{ id: idNormalizado }, { id: idNormalizado.toUpperCase() }] : []),
+          { nombre: { equals: nombreNormalizado, mode: 'insensitive' } },
         ],
       },
     });
     if (existeId)
       throw new ConflictException(
-        `Ya existe un programa académico con el ID "${dto.id}" o código "${dto.codigoOficialCaces}"`,
+        `Ya existe un programa académico con el nombre "${dto.nombre}"`,
       );
 
     return this.prisma.$transaction(async (tx) => {
       const programa = await tx.programaAcademico.create({
         data: {
-          id: idNormalizado,
-          codigoOficialCaces: codigoNormalizado,
-          nombre: dto.nombre.trim(),
-          descripcion: dto.descripcion?.trim() || null,
+          ...(idNormalizado ? { id: idNormalizado } : {}),
+          nombre: nombreNormalizado,
           activo: dto.activo ?? true,
         },
       });
@@ -1654,8 +1648,7 @@ export class AdminService {
           { id },
           { id: id.toUpperCase() },
           { id: id.toLowerCase() },
-          { codigoOficialCaces: id },
-          { codigoOficialCaces: id.toUpperCase() },
+          { nombre: { equals: id, mode: 'insensitive' } },
         ],
       },
     });
@@ -1664,10 +1657,6 @@ export class AdminService {
 
     const data: any = {};
     if (dto.nombre !== undefined) data.nombre = dto.nombre.trim();
-    if (dto.codigoOficialCaces !== undefined)
-      data.codigoOficialCaces = dto.codigoOficialCaces.trim().toUpperCase();
-    if (dto.descripcion !== undefined)
-      data.descripcion = dto.descripcion?.trim() || null;
     if (dto.activo !== undefined) data.activo = dto.activo;
 
     return this.prisma.$transaction(async (tx) => {
@@ -1723,7 +1712,7 @@ export class AdminService {
           { id },
           { id: id.toUpperCase() },
           { id: id.toLowerCase() },
-          { codigoOficialCaces: id },
+          { nombre: { equals: id, mode: 'insensitive' } },
         ],
       },
     });
@@ -1919,7 +1908,7 @@ export class AdminService {
         OR: [
           { id: dto.programaAcademicoId },
           { id: dto.programaAcademicoId.toUpperCase() },
-          { codigoOficialCaces: dto.programaAcademicoId },
+          { nombre: { equals: dto.programaAcademicoId, mode: 'insensitive' } },
         ],
       },
     });
@@ -2119,9 +2108,11 @@ export class AdminService {
     const whereClause: any = {};
 
     if (departamento) {
-      whereClause.departamento = {
-        contains: departamento,
-        mode: 'insensitive',
+      whereClause.departamentoRel = {
+        nombre: {
+          contains: departamento,
+          mode: 'insensitive',
+        },
       };
     }
 
@@ -2129,7 +2120,7 @@ export class AdminService {
       const busqueda = termino.trim();
       whereClause.OR = [
         { cargo: { contains: busqueda, mode: 'insensitive' } },
-        { departamento: { contains: busqueda, mode: 'insensitive' } },
+        { departamentoRel: { nombre: { contains: busqueda, mode: 'insensitive' } } },
         {
           usuario: {
             OR: [
@@ -2145,6 +2136,7 @@ export class AdminService {
     const perfiles = await this.prisma.perfilTrabajador.findMany({
       where: whereClause,
       include: {
+        departamentoRel: true,
         usuario: {
           include: {
             roles: {
@@ -2160,13 +2152,13 @@ export class AdminService {
 
     return perfiles.map((p) => {
       const u = p.usuario;
-      const rolesNombres = u.roles.map((r) => r.rol.nombre);
+      const rolesNombres = u.roles.map((r: any) => r.rol.nombre);
       const nombresDivididos = u.nombreCompleto?.split(' ') || [];
       const primerNombre = u.nombre || nombresDivididos[0] || '';
       const apellidos = u.apellido || nombresDivididos.slice(1).join(' ') || '';
 
       return {
-        id: p.id,
+        id: p.usuarioId,
         usuarioId: u.id,
         cedula: u.cedula || null,
         nombre: primerNombre,
@@ -2175,12 +2167,13 @@ export class AdminService {
         correo: u.correo,
         telefonoContacto: u.telefonoContacto || null,
         cargo: p.cargo,
-        departamento: p.departamento || 'Sin asignar',
+        departamento: p.departamentoRel?.nombre || 'Sin asignar',
+        departamentoId: p.departamentoId,
         telefonoOficina: p.telefonoOficina || null,
         fechaIngreso: p.fechaIngreso.toISOString().split('T')[0],
         activo: p.activo && u.activo,
         roles: rolesNombres,
-        rolPrincipal: rolesNombres[0] || u.rol || 'STAFF',
+        rolPrincipal: rolesNombres[0] || 'STAFF',
         observaciones: p.observaciones || null,
         creadoEn: p.creadoEn.toISOString(),
       };
@@ -2191,11 +2184,10 @@ export class AdminService {
    * Obtiene el detalle de un trabajador por su ID de perfil o ID de usuario
    */
   async obtenerTrabajadorPorId(id: string) {
-    const perfil = await this.prisma.perfilTrabajador.findFirst({
-      where: {
-        OR: [{ id }, { usuarioId: id }],
-      },
+    const perfil = await this.prisma.perfilTrabajador.findUnique({
+      where: { usuarioId: id },
       include: {
+        departamentoRel: true,
         usuario: {
           include: {
             roles: {
@@ -2213,10 +2205,10 @@ export class AdminService {
     }
 
     const u = perfil.usuario;
-    const rolesNombres = u.roles.map((r) => r.rol.nombre);
+    const rolesNombres = u.roles.map((r: any) => r.rol.nombre);
 
     return {
-      id: perfil.id,
+      id: perfil.usuarioId,
       usuarioId: u.id,
       cedula: u.cedula || null,
       nombre: u.nombre,
@@ -2225,12 +2217,13 @@ export class AdminService {
       correo: u.correo,
       telefonoContacto: u.telefonoContacto,
       cargo: perfil.cargo,
-      departamento: perfil.departamento,
+      departamento: perfil.departamentoRel?.nombre || 'Sin asignar',
+      departamentoId: perfil.departamentoId,
       telefonoOficina: perfil.telefonoOficina,
       fechaIngreso: perfil.fechaIngreso.toISOString().split('T')[0],
       activo: perfil.activo && u.activo,
       roles: rolesNombres,
-      rolPrincipal: rolesNombres[0] || u.rol,
+      rolPrincipal: rolesNombres[0] || 'STAFF',
       observaciones: perfil.observaciones,
       creadoEn: perfil.creadoEn.toISOString(),
       actualizadoEn: perfil.actualizadoEn.toISOString(),
@@ -2306,7 +2299,6 @@ export class AdminService {
           nombreCompleto,
           contrasenaHash,
           telefonoContacto: dto.telefonoContacto?.trim() || null,
-          rol: dto.rol.toLowerCase(),
           correoVerificado: true,
           activo: true,
           proveedorAuth: 'local',
@@ -2347,14 +2339,16 @@ export class AdminService {
           usuarioId: nuevoUsuario.id,
           cargo: dto.cargo.trim(),
           departamentoId: resolvedDepartamentoId,
-          departamento: resolvedDepartamentoNombre,
           telefonoOficina: dto.telefonoOficina?.trim() || null,
           observaciones: dto.observaciones?.trim() || null,
           activo: true,
         },
+        include: {
+          departamentoRel: true,
+        },
       });
 
-      return { nuevoUsuario, nuevoPerfil };
+      return { nuevoUsuario, nuevoPerfil, resolvedDepartamentoNombre };
     });
 
     this.logger.log(
@@ -2364,12 +2358,15 @@ export class AdminService {
     return {
       mensaje: 'Trabajador registrado exitosamente en el sistema',
       trabajador: {
-        id: resultado.nuevoPerfil.id,
+        id: resultado.nuevoPerfil.usuarioId,
         usuarioId: resultado.nuevoUsuario.id,
         correo: resultado.nuevoUsuario.correo,
         nombreCompleto: resultado.nuevoUsuario.nombreCompleto,
         cargo: resultado.nuevoPerfil.cargo,
-        departamento: resultado.nuevoPerfil.departamento,
+        departamento:
+          resultado.nuevoPerfil.departamentoRel?.nombre ||
+          resultado.resolvedDepartamentoNombre ||
+          'Sin asignar',
         rol: dto.rol,
         activo: true,
       },
@@ -2380,11 +2377,10 @@ export class AdminService {
    * Actualiza el perfil de un trabajador y sus datos de usuario
    */
   async actualizarTrabajador(id: string, dto: ActualizarTrabajadorDto) {
-    const perfil = await this.prisma.perfilTrabajador.findFirst({
-      where: {
-        OR: [{ id }, { usuarioId: id }],
-      },
+    const perfil = await this.prisma.perfilTrabajador.findUnique({
+      where: { usuarioId: id },
       include: {
+        departamentoRel: true,
         usuario: {
           include: {
             roles: {
@@ -2461,7 +2457,6 @@ export class AdminService {
         });
 
         if (nuevoRolDb) {
-          dataUsuario.rol = dto.rol.toLowerCase();
           await tx.usuarioRol.deleteMany({
             where: { usuarioId },
           });
@@ -2501,7 +2496,6 @@ export class AdminService {
           }
         }
         dataPerfil.departamentoId = deptoId;
-        dataPerfil.departamento = deptoNombre;
       }
 
       if (dto.telefonoOficina !== undefined) {
@@ -2514,23 +2508,21 @@ export class AdminService {
 
       if (Object.keys(dataPerfil).length > 0) {
         await tx.perfilTrabajador.update({
-          where: { id: perfil.id },
+          where: { usuarioId },
           data: dataPerfil,
         });
       }
     });
 
-    return this.obtenerTrabajadorPorId(perfil.id);
+    return this.obtenerTrabajadorPorId(usuarioId);
   }
 
   /**
    * Alterna el estado activo/inactivo de un trabajador
    */
   async alternarEstadoTrabajador(id: string) {
-    const perfil = await this.prisma.perfilTrabajador.findFirst({
-      where: {
-        OR: [{ id }, { usuarioId: id }],
-      },
+    const perfil = await this.prisma.perfilTrabajador.findUnique({
+      where: { usuarioId: id },
     });
 
     if (!perfil) {
@@ -2541,7 +2533,7 @@ export class AdminService {
 
     await this.prisma.$transaction(async (tx) => {
       await tx.perfilTrabajador.update({
-        where: { id: perfil.id },
+        where: { usuarioId: perfil.usuarioId },
         data: { activo: nuevoEstado },
       });
       await tx.usuario.update({
@@ -2552,7 +2544,7 @@ export class AdminService {
 
     return {
       mensaje: `Trabajador ${nuevoEstado ? 'activado' : 'desactivado'} exitosamente`,
-      id: perfil.id,
+      id: perfil.usuarioId,
       activo: nuevoEstado,
     };
   }
@@ -2685,14 +2677,6 @@ export class AdminService {
         },
       },
     });
-
-    // Sincronizar nombre en perfiles existentes si se modificó
-    if (dto.nombre && dto.nombre.trim() !== depto.nombre) {
-      await this.prisma.perfilTrabajador.updateMany({
-        where: { departamentoId: id },
-        data: { departamento: dto.nombre.trim() },
-      });
-    }
 
     this.logger.log(`Departamento institucional actualizado: ${deptoActualizado.nombre} (${id})`);
     return deptoActualizado;

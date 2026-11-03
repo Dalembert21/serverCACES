@@ -3,10 +3,13 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@prisma/client';
+import { AuditContextService } from '../common/audit/audit-context.service.js';
+import { createAuditExtension } from './prisma-audit.extension.js';
 
 @Injectable()
 export class PrismaService
@@ -15,7 +18,10 @@ export class PrismaService
 {
   private readonly logger = new Logger(PrismaService.name);
 
-  constructor(configService: ConfigService) {
+  constructor(
+    configService: ConfigService,
+    @Optional() private readonly auditContextService?: AuditContextService,
+  ) {
     const url = configService.get<string>('DATABASE_URL');
     if (!url) {
       throw new Error(
@@ -49,6 +55,17 @@ export class PrismaService
               { emit: 'stdout', level: 'error' },
             ]
           : [{ emit: 'stdout', level: 'error' }],
+    });
+
+    const extended = this.$extends(createAuditExtension(this.auditContextService));
+
+    return new Proxy(this, {
+      get(target, prop, receiver) {
+        if (prop in extended) {
+          return (extended as any)[prop];
+        }
+        return Reflect.get(target, prop, receiver);
+      },
     });
   }
 

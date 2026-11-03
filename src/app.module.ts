@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import {
   appConfig,
   authConfig,
@@ -9,6 +9,8 @@ import {
   databaseConfig,
 } from './config/index.js';
 import { PrismaModule } from './database/index.js';
+import { AuditoriaModule } from './auditoria/index.js';
+import { AuditInterceptor } from './common/audit/audit.interceptor.js';
 import { AuthModule } from './auth/index.js';
 import { AccesibilidadModule } from './accesibilidad/index.js';
 import { ProgramasModule } from './programas/index.js';
@@ -39,6 +41,7 @@ import { AppService } from './app.service.js';
         },
       ],
     }),
+    AuditoriaModule,
     PrismaModule,
     AuthModule,
     AccesibilidadModule,
@@ -54,6 +57,10 @@ import { AppService } from './app.service.js';
     {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditInterceptor,
     },
   ],
 })

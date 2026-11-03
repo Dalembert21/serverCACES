@@ -11,23 +11,15 @@ import {
 import { EsTextoCoherente } from '../../common/index.js';
 
 export class CrearProgramaDto {
-  @ApiProperty({ example: 'prog-odontologia', description: 'ID identificador del programa' })
+  @ApiProperty({ example: 'prog-odontologia', description: 'ID identificador del programa (opcional, generado automáticamente si no se envía)', required: false })
+  @IsOptional()
   @IsString({ message: 'El ID del programa debe ser texto' })
-  @IsNotEmpty({ message: 'El ID del programa es obligatorio' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toUpperCase() : value,
   )
-  id: string;
+  id?: string;
 
-  @ApiProperty({ example: 'CACES-ODO-2026', description: 'Código oficial registrado ante CACES' })
-  @IsString({ message: 'El código oficial CACES debe ser texto' })
-  @IsNotEmpty({ message: 'El código oficial CACES es obligatorio' })
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim().toUpperCase() : value,
-  )
-  codigoOficialCaces: string;
-
-  @ApiProperty({ example: 'Odontología General CACES', description: 'Nombre oficial de la carrera' })
+  @ApiProperty({ example: 'Odontología', description: 'Nombre oficial de la carrera / módulo' })
   @IsString({ message: 'El nombre debe ser texto' })
   @IsNotEmpty({ message: 'El nombre del programa es obligatorio' })
   @Transform(({ value }: { value: unknown }) =>
@@ -35,11 +27,6 @@ export class CrearProgramaDto {
   )
   @EsTextoCoherente(3, { message: 'El nombre debe tener al menos 3 caracteres coherentes' })
   nombre: string;
-
-  @ApiProperty({ example: 'Preparación integral para el Examen de Habilitación para el Ejercicio Profesional (EHEP) en Odontología', required: false })
-  @IsOptional()
-  @IsString({ message: 'La descripción debe ser texto' })
-  descripcion?: string;
 
   @ApiProperty({ example: 180, description: 'Duración oficial del simulador en minutos', required: false })
   @IsOptional()

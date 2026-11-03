@@ -209,7 +209,6 @@ describe('AuthService', () => {
         apellido: 'Morales',
         nombreCompleto: 'Carlos Morales',
         correo: 'carlos@gmail.com',
-        rol: 'estudiante',
         programaActivoId: 'prog-medicina',
         creadoEn: new Date('2026-10-24T05:00:00.000Z'),
         roles: [{ rol: { nombre: RolNombre.ESTUDIANTE } }],

@@ -68,9 +68,7 @@ export class ProgramasService {
         codigo: codigoCaces,
         titulo: `CACES — ${prog.nombre}`,
         subtitulo: 'Examen de Habilitación para el Ejercicio Profesional',
-        descripcion:
-          prog.descripcion ??
-          `Preparación para el examen oficial CACES de ${prog.nombre}.`,
+        descripcion: `Preparación para el examen oficial CACES de ${prog.nombre}.`,
         totalPreguntasExamen: plantillaOficial?.totalPreguntas ?? 150,
         duracionMinutosExamen: plantillaOficial?.duracionMinutos ?? 240,
         notaMinimaAprobacion: plantillaOficial?.notaMinimaAprobacion ?? 70,
@@ -104,7 +102,7 @@ export class ProgramasService {
           { id: progLimpio },
           { id: progLimpio.toUpperCase() },
           { id: `caces-${progLimpio.toLowerCase().replace('prog-', '')}` },
-          { codigoOficialCaces: progLimpio },
+          { nombre: { equals: progLimpio, mode: 'insensitive' } },
         ],
       },
       include: {
@@ -161,7 +159,6 @@ export class ProgramasService {
     return {
       programaId: programa.id,
       nombrePrograma: programa.nombre,
-      codigoOficialCaces: programa.codigoOficialCaces,
       totalSubmodulos: submodulos.length,
       submodulos,
       totalAreas: areas.length,

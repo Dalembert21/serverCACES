@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service.js';
 import { DeclararPagoDto } from './dto/declarar-pago.dto.js';
 
@@ -69,7 +70,7 @@ export class SuscripcionesService {
       plan: {
         id: suscripcion.plan.id,
         nombre: suscripcion.plan.nombre,
-        precioDolares: suscripcion.plan.precioDolares,
+        precioDolares: Number(suscripcion.plan.precioDolares),
         accesoSimuladoresIlimitados: suscripcion.plan.accesoSimuladoresIlimitados,
         accesoAnaliticaAvanzada: suscripcion.plan.accesoAnaliticaAvanzada,
       },
@@ -144,7 +145,7 @@ export class SuscripcionesService {
         bancoCooperativaId: bancoDb?.id || null,
         entidadBancariaOrigen: nombreEntidad,
         numeroComprobanteReferencia: dto.numeroComprobanteReferencia.trim(),
-        montoDolares: dto.montoDolares,
+        montoDolares: new Prisma.Decimal(dto.montoDolares),
         urlFotoComprobante: dto.urlFotoComprobante?.trim() || null,
         estado: 'PENDIENTE_VERIFICACION',
         fechaPagoDeclarada: new Date(),

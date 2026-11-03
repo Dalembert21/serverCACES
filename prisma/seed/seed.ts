@@ -86,14 +86,12 @@ async function main() {
       update: {
         nombreCompleto: usr.nombreCompleto,
         contrasenaHash: usr.contrasenaHash,
-        rol: usr.rol.toLowerCase(),
       },
       create: {
         correo: usr.correo,
         nombreCompleto: usr.nombreCompleto,
         contrasenaHash: usr.contrasenaHash,
         correoVerificado: usr.correoVerificado,
-        rol: usr.rol.toLowerCase(),
       },
     });
 
@@ -125,14 +123,12 @@ async function main() {
         where: { usuarioId: usuarioDb.id },
         update: {
           cargo: usr.rol === RolNombre.SUPERADMIN ? 'Superadministrador' : 'Gestor de Tesorería',
-          departamento: nombreDepto,
           departamentoId: deptoId,
           activo: true,
         },
         create: {
           usuarioId: usuarioDb.id,
           cargo: usr.rol === RolNombre.SUPERADMIN ? 'Superadministrador' : 'Gestor de Tesorería',
-          departamento: nombreDepto,
           departamentoId: deptoId,
           activo: true,
         },
@@ -175,15 +171,11 @@ async function main() {
     const programaDb = await prisma.programaAcademico.upsert({
       where: { id: prog.codigo },
       update: {
-        nombre: prog.nombre,
-        descripcion: prog.descripcion,
-        codigoOficialCaces: `CACES-${prog.codigo}`,
+        nombre: prog.nombre === 'Medicina Humana' ? 'Medicina' : prog.nombre,
       },
       create: {
         id: prog.codigo,
-        codigoOficialCaces: `CACES-${prog.codigo}`,
-        nombre: prog.nombre,
-        descripcion: prog.descripcion,
+        nombre: prog.nombre === 'Medicina Humana' ? 'Medicina' : prog.nombre,
       },
     });
 
@@ -316,10 +308,7 @@ async function main() {
   const adminUsuarioDb =
     (await prisma.usuario.findFirst({
       where: {
-        OR: [
-          { rol: 'superadmin' },
-          { roles: { some: { rol: { nombre: RolNombre.SUPERADMIN } } } },
-        ],
+        roles: { some: { rol: { nombre: RolNombre.SUPERADMIN } } },
       },
     })) || (await prisma.usuario.findFirst());
 
