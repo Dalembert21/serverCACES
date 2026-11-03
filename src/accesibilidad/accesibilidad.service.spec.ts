@@ -19,7 +19,6 @@ describe('AccesibilidadService', () => {
   };
 
   const mockPreferencia = {
-    id: 'pref-uuid-456',
     usuarioId: mockUsuarioId,
     tamanoTexto: TamanoTexto.NORMAL,
     altoContraste: false,

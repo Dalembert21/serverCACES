@@ -10,14 +10,6 @@ import {
 import { EsTextoCoherente } from '../../common/index.js';
 
 export class ActualizarProgramaDto {
-  @ApiProperty({ example: 'CACES-ODO-2026-V2', required: false })
-  @IsOptional()
-  @IsString({ message: 'El código oficial CACES debe ser texto' })
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim().toUpperCase() : value,
-  )
-  codigoOficialCaces?: string;
-
   @ApiProperty({ example: 'Odontología Especializada', required: false })
   @IsOptional()
   @IsString({ message: 'El nombre debe ser texto' })
@@ -26,11 +18,6 @@ export class ActualizarProgramaDto {
   )
   @EsTextoCoherente(3, { message: 'El nombre debe tener al menos 3 caracteres coherentes' })
   nombre?: string;
-
-  @ApiProperty({ example: 'Descripción actualizada', required: false })
-  @IsOptional()
-  @IsString({ message: 'La descripción debe ser texto' })
-  descripcion?: string;
 
   @ApiProperty({ example: 180, required: false })
   @IsOptional()

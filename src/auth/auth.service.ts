@@ -131,7 +131,6 @@ export class AuthService {
           apellido: dto.apellido?.trim() || null,
           nombreCompleto,
           contrasenaHash,
-          rol: 'estudiante',
           programaActivoId: dto.programaInicialId || 'prog-medicina',
           proveedorAuth: 'local',
           correoVerificado: false,
@@ -258,7 +257,7 @@ export class AuthService {
     );
 
     const esAdmin = roles.includes(RolNombre.SUPERADMIN) || roles.includes(RolNombre.TESORERIA);
-    const rolFront = esAdmin ? 'administrador_academico' : (usuario.rol || 'estudiante');
+    const rolFront = esAdmin ? 'administrador_academico' : (roles[0]?.toLowerCase() || 'estudiante');
 
     const nombresDivididos = usuario.nombreCompleto.split(' ');
     const primerNombre = usuario.nombre || nombresDivididos[0] || 'Usuario';
@@ -379,7 +378,6 @@ export class AuthService {
         nombreCompleto: true,
         tipoIdentificacion: true,
         cedula: true,
-        rol: true,
         programaActivoId: true,
         googleId: true,
         fotoUrl: true,
@@ -513,7 +511,6 @@ export class AuthService {
             googleId,
             fotoUrl: picture || null,
             proveedorAuth: 'google',
-            rol: 'estudiante',
             correoVerificado: true,
           },
         });
@@ -595,7 +592,7 @@ export class AuthService {
       roles.includes(RolNombre.TESORERIA);
     const rolFront = esAdmin
       ? 'administrador_academico'
-      : usuario.rol || 'estudiante';
+      : (roles[0]?.toLowerCase() || 'estudiante');
 
     // 4. Generar Tokens y registrar sesión
     const tokens = await this.generarYGuardarTokens(
@@ -681,7 +678,7 @@ export class AuthService {
       roles.includes(RolNombre.TESORERIA);
     const rolFront = esAdmin
       ? 'administrador_academico'
-      : usuarioActualizado.rol || 'estudiante';
+      : (roles[0]?.toLowerCase() || 'estudiante');
 
     const nombre =
       usuarioActualizado.nombre ||

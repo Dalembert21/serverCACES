@@ -28,13 +28,14 @@ model Usuario {
   telefonoContacto     String?  @map("TELEFONO_CONTACTO")
   activo               Boolean  @default(true) @map("ESTADO_CUENTA_ACTIVA")
   correoVerificado     Boolean  @default(false) @map("CORREO_CONFIRMADO")
-  rol                  String   @default("estudiante") @map("ROL")
   programaActivoId     String?  @map("PROGRAMA_ACTIVO_ID")
   googleId             String?  @unique @map("GOOGLE_ID")
   fotoUrl              String?  @map("FOTO_URL")
   proveedorAuth        String   @default("local") @map("PROVEEDOR_AUTH")
-  creadoEn             DateTime @default(now()) @map("FECHA_REGISTRO")
-  actualizadoEn        DateTime @updatedAt @map("FECHA_ACTUALIZACION")
+  creadoEn             DateTime @default(now()) @db.Timestamptz @map("FECHA_REGISTRO")
+  actualizadoEn        DateTime @updatedAt @db.Timestamptz @map("FECHA_ACTUALIZACION")
+  creadoPorId          String?  @map("CREADO_POR")
+  modificadoPorId      String?  @map("MODIFICADO_POR")
 
   roles                     UsuarioRol[]
   sesiones                  SesionAutenticacion[]
@@ -56,38 +57,45 @@ model Usuario {
   auditoriasOperaciones     AuditoriaOperacionSistema[]
   auditoriasAccesos         AuditoriaAccesoSeguridad[]
 
+  programaActivo            ProgramaAcademico?            @relation(fields: [programaActivoId], references: [id], onDelete: SetNull)
+  creadoPor                 Usuario?                      @relation("UsuarioCreador", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  modificadoPor             Usuario?                      @relation("UsuarioModificador", fields: [modificadoPorId], references: [id], onDelete: SetNull)
+  usuariosCreados           Usuario[]                     @relation("UsuarioCreador")
+  usuariosModificados       Usuario[]                     @relation("UsuarioModificador")
+
   @@map("USUARIOS")
 }
 
 model PerfilTrabajador {
-  id              String        @id @default(uuid()) @map("PERFIL_TRABAJADOR_ID")
-  usuarioId       String        @unique @map("USUARIO_ID")
+  usuarioId       String        @id @map("USUARIO_ID")
   cargo           String        @map("CARGO")
   departamentoId  String?       @map("DEPARTAMENTO_ID")
-  departamento    String?       @map("DEPARTAMENTO")
   telefonoOficina String?       @map("TELEFONO_OFICINA")
-  fechaIngreso    DateTime      @default(now()) @map("FECHA_INGRESO")
+  fechaIngreso    DateTime      @default(now()) @db.Timestamptz @map("FECHA_INGRESO")
   activo          Boolean       @default(true) @map("ESTADO_ACTIVO")
   observaciones   String?       @db.Text @map("OBSERVACIONES")
-  creadoEn        DateTime      @default(now()) @map("FECHA_CREACION")
-  actualizadoEn   DateTime      @updatedAt @map("FECHA_ACTUALIZACION")
+  creadoEn        DateTime      @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn   DateTime      @updatedAt @db.Timestamptz @map("FECHA_ACTUALIZACION")
+  creadoPorId     String?       @map("CREADO_POR")
+  modificadoPorId String?       @map("MODIFICADO_POR")
 
   usuario         Usuario       @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   departamentoRel Departamento? @relation(fields: [departamentoId], references: [id], onDelete: SetNull)
 
   @@index([cargo])
-  @@index([departamento])
   @@index([departamentoId])
   @@map("PERFILES_TRABAJADORES")
 }
 
 model Departamento {
-  id            String             @id @default(uuid()) @map("DEPARTAMENTO_ID")
-  nombre        String             @unique @map("NOMBRE_DEPARTAMENTO")
-  descripcion   String?            @map("DESCRIPCION_DEPARTAMENTO")
-  activo        Boolean            @default(true) @map("ESTADO_ACTIVO")
-  creadoEn      DateTime           @default(now()) @map("FECHA_CREACION")
-  actualizadoEn DateTime           @updatedAt @map("FECHA_ACTUALIZACION")
+  id              String             @id @default(uuid()) @map("DEPARTAMENTO_ID")
+  nombre          String             @unique @map("NOMBRE_DEPARTAMENTO")
+  descripcion     String?            @map("DESCRIPCION_DEPARTAMENTO")
+  activo          Boolean            @default(true) @map("ESTADO_ACTIVO")
+  creadoEn        DateTime           @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn   DateTime           @updatedAt @db.Timestamptz @map("FECHA_ACTUALIZACION")
+  creadoPorId     String?            @map("CREADO_POR")
+  modificadoPorId String?            @map("MODIFICADO_POR")
 
   trabajadores  PerfilTrabajador[]
 
@@ -95,19 +103,22 @@ model Departamento {
 }
 
 model Rol {
-  id          String       @id @map("ROL_ID")
-  nombre      RolNombre    @unique @map("NOMBRE_ROL")
-  descripcion String?      @map("DESCRIPCION_ROL")
-  activo      Boolean      @default(true) @map("ESTADO_ROL_ACTIVO")
-  usuarios    UsuarioRol[]
+  id            String       @id @map("ROL_ID")
+  nombre        RolNombre    @unique @map("NOMBRE_ROL")
+  descripcion   String?      @map("DESCRIPCION_ROL")
+  activo        Boolean      @default(true) @map("ESTADO_ROL_ACTIVO")
+  creadoEn      DateTime     @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn DateTime     @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  usuarios      UsuarioRol[]
 
   @@map("ROLES")
 }
 
 model UsuarioRol {
-  usuarioId  String   @map("USUARIO_ID")
-  rolId      String   @map("ROL_ID")
-  asignadoEn DateTime @default(now()) @map("FECHA_ASIGNACION")
+  usuarioId     String   @map("USUARIO_ID")
+  rolId         String   @map("ROL_ID")
+  asignadoEn    DateTime @default(now()) @db.Timestamptz @map("FECHA_ASIGNACION")
+  asignadoPorId String?  @map("ASIGNADO_POR_ID")
 
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   rol     Rol     @relation(fields: [rolId], references: [id], onDelete: Cascade)
@@ -123,8 +134,8 @@ model SesionAutenticacion {
   direccionIp       String   @default("127.0.0.1") @map("DIRECCION_IP")
   dispositivoAcceso String   @default("DESCONOCIDO") @map("DISPOSITIVO_ACCESO")
   revocado          Boolean  @default(false) @map("ESTADO_REVOCADO")
-  expiraEn          DateTime @map("FECHA_EXPIRACION")
-  creadoEn          DateTime @default(now()) @map("FECHA_CREACION")
+  expiraEn          DateTime @db.Timestamptz @map("FECHA_EXPIRACION")
+  creadoEn          DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
 
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
@@ -137,8 +148,8 @@ model TokenRecuperacionContrasena {
   usuarioId  String   @map("USUARIO_ID")
   hashToken  String   @unique @map("HASH_TOKEN")
   utilizado  Boolean  @default(false) @map("ESTADO_UTILIZADO")
-  expiraEn   DateTime @map("FECHA_EXPIRACION")
-  creadoEn   DateTime @default(now()) @map("FECHA_CREACION")
+  expiraEn   DateTime @db.Timestamptz @map("FECHA_EXPIRACION")
+  creadoEn   DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
 
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
@@ -151,16 +162,18 @@ model TokenRecuperacionContrasena {
 // ============================================================================
 
 model ProgramaAcademico {
-  id                  String   @id @map("PROGRAMA_ACADEMICO_ID")
-  codigoOficialCaces  String   @unique @map("CODIGO_OFICIAL_CACES")
-  nombre              String   @map("NOMBRE_PROGRAMA")
-  descripcion         String?  @map("DESCRIPCION_PROGRAMA")
+  id                  String   @id @default(uuid()) @map("PROGRAMA_ACADEMICO_ID")
+  nombre              String   @unique @map("NOMBRE_PROGRAMA")
   activo              Boolean  @default(true) @map("ESTADO_PROGRAMA_ACTIVO")
-  creadoEn            DateTime @default(now()) @map("FECHA_CREACION")
+  creadoEn            DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn       DateTime @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  creadoPorId         String?  @map("CREADO_POR")
+  modificadoPorId     String?  @map("MODIFICADO_POR")
 
   versionesTemarios         TemarioVersion[]
   configuracionesSimulador ConfiguracionSimulador[]
   submodulos               SubmoduloAcademico[]
+  usuariosActivos          Usuario[]
 
   @@map("PROGRAMAS_ACADEMICOS")
 }
@@ -172,8 +185,10 @@ model SubmoduloAcademico {
   descripcion         String?  @map("DESCRIPCION_SUBMODULO")
   orden               Int      @default(0) @map("ORDEN_VISUALIZACION")
   activo              Boolean  @default(true) @map("ESTADO_ACTIVO")
-  creadoEn            DateTime @default(now()) @map("FECHA_CREACION")
-  actualizadoEn       DateTime @updatedAt @map("FECHA_ACTUALIZACION")
+  creadoEn            DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn       DateTime @updatedAt @db.Timestamptz @map("FECHA_ACTUALIZACION")
+  creadoPorId         String?  @map("CREADO_POR")
+  modificadoPorId     String?  @map("MODIFICADO_POR")
 
   programa            ProgramaAcademico @relation(fields: [programaAcademicoId], references: [id], onDelete: Restrict)
   preguntas           Pregunta[]
@@ -187,10 +202,13 @@ model TemarioVersion {
   id                   String    @id @default(uuid()) @map("VERSION_TEMARIO_ID")
   programaAcademicoId  String    @map("PROGRAMA_ACADEMICO_ID")
   codigoVersion        String    @map("CODIGO_VERSION")
-  fechaInicioVigencia  DateTime  @default(now()) @map("FECHA_INICIO_VIGENCIA")
-  fechaFinVigencia     DateTime? @map("FECHA_FIN_VIGENCIA")
+  fechaInicioVigencia  DateTime  @default(now()) @db.Timestamptz @map("FECHA_INICIO_VIGENCIA")
+  fechaFinVigencia     DateTime? @db.Timestamptz @map("FECHA_FIN_VIGENCIA")
   activo               Boolean   @default(true) @map("ESTADO_VIGENTE")
-  creadoEn             DateTime  @default(now()) @map("FECHA_CREACION")
+  creadoEn             DateTime  @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn        DateTime  @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  creadoPorId          String?   @map("CREADO_POR")
+  modificadoPorId      String?   @map("MODIFICADO_POR")
 
   programa ProgramaAcademico @relation(fields: [programaAcademicoId], references: [id], onDelete: Cascade)
   areas    AreaAcademica[]
@@ -205,6 +223,10 @@ model AreaAcademica {
   nombre           String   @map("NOMBRE_AREA")
   descripcion      String?  @map("DESCRIPCION_AREA")
   pesoPorcentual   Float    @default(20.00) @map("PESO_PORCENTUAL_EXAMEN")
+  creadoEn         DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn    DateTime @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  creadoPorId      String?  @map("CREADO_POR")
+  modificadoPorId  String?  @map("MODIFICADO_POR")
 
   temarioVersion       TemarioVersion          @relation(fields: [temarioVersionId], references: [id], onDelete: Cascade)
   subareasCompetencias SubareaCompetencia[]
@@ -220,6 +242,10 @@ model SubareaCompetencia {
   codigoOficial   String   @map("CODIGO_OFICIAL")
   nombre          String   @map("NOMBRE_COMPETENCIA")
   descripcion     String?  @map("DESCRIPCION_COMPETENCIA")
+  creadoEn        DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn   DateTime @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  creadoPorId     String?  @map("CREADO_POR")
+  modificadoPorId String?  @map("MODIFICADO_POR")
 
   areaAcademica       AreaAcademica                 @relation(fields: [areaAcademicaId], references: [id], onDelete: Cascade)
   preguntas           Pregunta[]
@@ -261,7 +287,9 @@ model CasoClinico {
   tituloCaso       String   @map("TITULO_CASO")
   narrativaClinica String   @db.Text @map("NARRATIVA_CLINICA")
   autorUsuarioId   String   @map("AUTOR_USUARIO_ID")
-  creadoEn         DateTime @default(now()) @map("FECHA_CREACION")
+  creadoEn         DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn    DateTime @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  modificadoPorId  String?  @map("MODIFICADO_POR")
 
   autor     Usuario    @relation("CasoClinicoAutor", fields: [autorUsuarioId], references: [id], onDelete: Restrict)
   preguntas Pregunta[]
@@ -276,7 +304,9 @@ model Pregunta {
   casoClinicoId        String?  @map("CASO_CLINICO_ID")
   codigoPublico        String   @unique @map("CODIGO_IDENTIFICADOR_PUBLICO")
   creadorId            String   @map("AUTOR_DOCENTE_ID")
-  creadoEn             DateTime @default(now()) @map("FECHA_CREACION")
+  creadoEn             DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn        DateTime @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  modificadoPorId      String?  @map("MODIFICADO_POR")
 
   submodulo   SubmoduloAcademico? @relation(fields: [submoduloId], references: [id], onDelete: Restrict)
   subarea     SubareaCompetencia? @relation(fields: [subareaCompetenciaId], references: [id], onDelete: SetNull)
@@ -300,8 +330,11 @@ model PreguntaVersion {
   dificultad            DificultadPregunta @default(MEDIA) @map("GRADO_DIFICULTAD")
   estado                EstadoPregunta     @default(BORRADOR) @map("ESTADO_REVISION")
   revisorId             String?            @map("REVISOR_ACADEMICO_ID")
-  fechaRevision         DateTime?          @map("FECHA_REVISION")
-  creadoEn              DateTime           @default(now()) @map("FECHA_CREACION")
+  fechaRevision         DateTime?          @db.Timestamptz @map("FECHA_REVISION")
+  creadoEn              DateTime           @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn         DateTime           @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  creadoPorId           String?            @map("CREADO_POR")
+  modificadoPorId       String?            @map("MODIFICADO_POR")
 
   pregunta          Pregunta                      @relation(fields: [preguntaId], references: [id], onDelete: Cascade)
   revisor           Usuario?                      @relation("PreguntaRevisor", fields: [revisorId], references: [id], onDelete: SetNull)
@@ -317,12 +350,16 @@ model PreguntaVersion {
 }
 
 model PreguntaOpcion {
-  id                String  @id @default(uuid()) @map("OPCION_RESPUESTA_ID")
-  preguntaVersionId String  @map("VERSION_PREGUNTA_ID")
-  letra             String  @map("LETRA_OPCION")
-  texto             String  @db.Text @map("TEXTO_OPCION")
-  esCorrecta        Boolean @default(false) @map("ES_OPCION_CORRECTA")
-  justificacion     String? @db.Text @map("JUSTIFICACION_OPCION")
+  id                String   @id @default(uuid()) @map("OPCION_RESPUESTA_ID")
+  preguntaVersionId String   @map("VERSION_PREGUNTA_ID")
+  letra             String   @map("LETRA_OPCION")
+  texto             String   @db.Text @map("TEXTO_OPCION")
+  esCorrecta        Boolean  @default(false) @map("ES_OPCION_CORRECTA")
+  justificacion     String?  @db.Text @map("JUSTIFICACION_OPCION")
+  creadoEn          DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn     DateTime @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  creadoPorId       String?  @map("CREADO_POR")
+  modificadoPorId   String?  @map("MODIFICADO_POR")
 
   preguntaVersion PreguntaVersion              @relation(fields: [preguntaVersionId], references: [id], onDelete: Cascade)
   respuestas      RespuestaIntentoEvaluacion[]
@@ -332,12 +369,15 @@ model PreguntaOpcion {
 }
 
 model ActivoMultimedia {
-  id                  String         @id @default(uuid()) @map("MULTIMEDIA_PREGUNTA_ID")
-  preguntaVersionId   String         @map("VERSION_PREGUNTA_ID")
-  tipoActivo          TipoMultimedia @default(OTRO) @map("TIPO_RECURSO")
-  urlAlmacenamiento   String         @map("URL_ALMACENAMIENTO")
-  descripcionAccesible String        @db.Text @map("DESCRIPCION_ACCESIBLE_ALT")
-  creadoEn            DateTime       @default(now()) @map("FECHA_SUBIDA")
+  id                   String         @id @default(uuid()) @map("MULTIMEDIA_PREGUNTA_ID")
+  preguntaVersionId    String         @map("VERSION_PREGUNTA_ID")
+  tipoActivo           TipoMultimedia @default(OTRO) @map("TIPO_RECURSO")
+  urlAlmacenamiento    String         @map("URL_ALMACENAMIENTO")
+  descripcionAccesible String         @db.Text @map("DESCRIPCION_ACCESIBLE_ALT")
+  creadoEn             DateTime       @default(now()) @db.Timestamptz @map("FECHA_SUBIDA")
+  actualizadoEn        DateTime       @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  creadoPorId          String?        @map("CREADO_POR")
+  modificadoPorId      String?        @map("MODIFICADO_POR")
 
   preguntaVersion PreguntaVersion @relation(fields: [preguntaVersionId], references: [id], onDelete: Cascade)
 
@@ -345,13 +385,17 @@ model ActivoMultimedia {
 }
 
 model PreguntaReferencia {
-  id                  String  @id @default(uuid()) @map("BIBLIOGRAFIA_REFERENCIA_ID")
-  preguntaVersionId   String  @map("VERSION_PREGUNTA_ID")
-  fuenteOficial       String  @map("FUENTE_OFICIAL")
-  tituloPublicacion   String  @map("TITULO_PUBLICACION")
-  anioPublicacion     Int     @map("ANIO_PUBLICACION")
-  numeroPaginaCapitulo String? @map("NUMERO_PAGINA_CAPITULO")
-  enlaceWebDocumento  String? @map("ENLACE_WEB_DOCUMENTO")
+  id                   String   @id @default(uuid()) @map("BIBLIOGRAFIA_REFERENCIA_ID")
+  preguntaVersionId    String   @map("VERSION_PREGUNTA_ID")
+  fuenteOficial        String   @map("FUENTE_OFICIAL")
+  tituloPublicacion    String   @map("TITULO_PUBLICACION")
+  anioPublicacion      Int      @map("ANIO_PUBLICACION")
+  numeroPaginaCapitulo String?  @map("NUMERO_PAGINA_CAPITULO")
+  enlaceWebDocumento   String?  @map("ENLACE_WEB_DOCUMENTO")
+  creadoEn             DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn        DateTime @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  creadoPorId          String?  @map("CREADO_POR")
+  modificadoPorId      String?  @map("MODIFICADO_POR")
 
   preguntaVersion PreguntaVersion @relation(fields: [preguntaVersionId], references: [id], onDelete: Cascade)
 
@@ -385,8 +429,10 @@ model ReportePregunta {
   estado              EstadoReportePregunta @default(PENDIENTE) @map("ESTADO_REPORTE")
   revisadoPorId       String?               @map("REVISADO_POR_USUARIO_ID")
   respuestaResolucion String?               @db.Text @map("RESPUESTA_RESOLUCION")
-  creadoEn            DateTime              @default(now()) @map("FECHA_CREACION")
-  resueltoEn          DateTime?             @map("FECHA_RESOLUCION")
+  creadoEn            DateTime              @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  resueltoEn          DateTime?             @db.Timestamptz @map("FECHA_RESOLUCION")
+  actualizadoEn       DateTime?             @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  modificadoPorId     String?               @map("MODIFICADO_POR")
 
   pregunta        Pregunta        @relation(fields: [preguntaId], references: [id], onDelete: Cascade)
   preguntaVersion PreguntaVersion @relation(fields: [preguntaVersionId], references: [id], onDelete: Cascade)
@@ -429,6 +475,10 @@ model ConfiguracionSimulador {
   totalPreguntas       Int           @map("CANTIDAD_TOTAL_PREGUNTAS")
   notaMinimaAprobacion Float         @default(70.00) @map("NOTA_MINIMA_APROBACION")
   activo               Boolean       @default(true) @map("ESTADO_CONFIGURACION_ACTIVA")
+  creadoEn             DateTime      @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn        DateTime      @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  creadoPorId          String?       @map("CREADO_POR")
+  modificadoPorId      String?       @map("MODIFICADO_POR")
 
   programa ProgramaAcademico   @relation(fields: [programaAcademicoId], references: [id], onDelete: Cascade)
   intentos IntentoEvaluacion[]
@@ -444,12 +494,14 @@ model IntentoEvaluacion {
   modoRetroalimentacion    ModoRetroalimentacion  @default(AL_FINALIZAR) @map("MODO_RETROALIMENTACION")
   filtrosPersonalizados    Json?                  @map("FILTROS_PERSONALIZADOS_JSON")
   estado                   EstadoIntento          @default(EN_PROGRESO) @map("ESTADO_INTENTO")
-  fechaInicio              DateTime               @default(now()) @map("FECHA_HORA_INICIO")
-  fechaFinalizacion        DateTime?              @map("FECHA_HORA_FINALIZACION")
+  fechaInicio              DateTime               @default(now()) @db.Timestamptz @map("FECHA_HORA_INICIO")
+  fechaFinalizacion        DateTime?              @db.Timestamptz @map("FECHA_HORA_FINALIZACION")
   tiempoConsumidoSegundos  Int                    @default(0) @map("TIEMPO_CONSUMIDO_SEGUNDOS")
-  creadoEn                 DateTime               @default(now()) @map("FECHA_CREACION")
+  creadoEn                 DateTime               @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn            DateTime?              @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  modificadoPorId          String?                @map("MODIFICADO_POR")
 
-  usuario                Usuario                      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuario                Usuario                      @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
   configuracionSimulador ConfiguracionSimulador?      @relation(fields: [configuracionSimuladorId], references: [id], onDelete: SetNull)
   respuestas             RespuestaIntentoEvaluacion[]
   resultado              ResultadoIntentoConsolidado?
@@ -460,20 +512,19 @@ model IntentoEvaluacion {
 }
 
 model RespuestaIntentoEvaluacion {
-  id                    String   @id @default(uuid()) @map("RESPUESTA_INTENTO_ID")
-  intentoId             String   @map("INTENTO_EVALUACION_ID")
-  preguntaVersionId     String   @map("VERSION_PREGUNTA_ID")
-  opcionSeleccionadaId  String?  @map("OPCION_RESPUESTA_SELECCIONADA_ID")
-  esCorrecta            Boolean  @default(false) @map("ES_RESPUESTA_CORRECTA")
-  marcadaParaRevision   Boolean  @default(false) @map("MARCADA_PARA_REVISION")
-  tiempoRespuestaSegundos Int    @default(0) @map("TIEMPO_RESPUESTA_SEGUNDOS")
-  fechaRespuesta        DateTime @default(now()) @map("FECHA_RESPUESTA")
+  intentoId               String   @map("INTENTO_EVALUACION_ID")
+  preguntaVersionId       String   @map("VERSION_PREGUNTA_ID")
+  opcionSeleccionadaId    String?  @map("OPCION_RESPUESTA_SELECCIONADA_ID")
+  esCorrecta              Boolean  @default(false) @map("ES_RESPUESTA_CORRECTA")
+  marcadaParaRevision     Boolean  @default(false) @map("MARCADA_PARA_REVISION")
+  tiempoRespuestaSegundos Int      @default(0) @map("TIEMPO_RESPUESTA_SEGUNDOS")
+  fechaRespuesta          DateTime @default(now()) @db.Timestamptz @map("FECHA_RESPUESTA")
 
   intento            IntentoEvaluacion @relation(fields: [intentoId], references: [id], onDelete: Cascade)
   preguntaVersion    PreguntaVersion   @relation(fields: [preguntaVersionId], references: [id], onDelete: Restrict)
   opcionSeleccionada PreguntaOpcion?   @relation(fields: [opcionSeleccionadaId], references: [id], onDelete: SetNull)
 
-  @@unique([intentoId, preguntaVersionId])
+  @@id([intentoId, preguntaVersionId])
   @@index([intentoId])
   @@map("RESPUESTAS_INTENTOS_EVALUACION")
 }
@@ -487,7 +538,7 @@ model ResultadoIntentoConsolidado {
   totalOmitidas         Int      @map("TOTAL_PREGUNTAS_OMITIDAS")
   calificacionSobreCien Float    @map("CALIFICACION_SOBRE_CIEN")
   aprobado              Boolean  @map("RESULTADO_APROBATORIO")
-  fechaCalculo          DateTime @default(now()) @map("FECHA_CALCULO")
+  fechaCalculo          DateTime @default(now()) @db.Timestamptz @map("FECHA_CALCULO")
 
   intento        IntentoEvaluacion       @relation(fields: [intentoId], references: [id], onDelete: Cascade)
   desglosesAreas DesgloseResultadoArea[]
@@ -496,7 +547,6 @@ model ResultadoIntentoConsolidado {
 }
 
 model DesgloseResultadoArea {
-  id                 String @id @default(uuid()) @map("DESGLOSE_RESULTADO_AREA_ID")
   resultadoIntentoId String @map("RESULTADO_INTENTO_ID")
   areaAcademicaId    String @map("AREA_ACADEMICA_ID")
   totalPreguntas     Int    @map("CANTIDAD_PREGUNTAS_AREA")
@@ -507,7 +557,7 @@ model DesgloseResultadoArea {
   resultadoIntento ResultadoIntentoConsolidado @relation(fields: [resultadoIntentoId], references: [id], onDelete: Cascade)
   areaAcademica    AreaAcademica               @relation(fields: [areaAcademicaId], references: [id], onDelete: Restrict)
 
-  @@unique([resultadoIntentoId, areaAcademicaId])
+  @@id([resultadoIntentoId, areaAcademicaId])
   @@map("DESGLOSE_RESULTADOS_AREAS")
 }
 
@@ -522,7 +572,8 @@ model DominioCognitivoCompetencia {
   totalRespondidas     Int      @default(0) @map("TOTAL_PREGUNTAS_RESPONDIDAS")
   totalAciertos        Int      @default(0) @map("TOTAL_ACIERTOS_ACUMULADOS")
   indiceDominio        Float    @default(0.00) @map("INDICE_DOMINIO_CALCULADO")
-  actualizadoEn        DateTime @updatedAt @map("FECHA_ULTIMA_ACTUALIZACION")
+  creadoEn             DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn        DateTime @updatedAt @db.Timestamptz @map("FECHA_ULTIMA_ACTUALIZACION")
 
   usuario            Usuario            @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   subareaCompetencia SubareaCompetencia @relation(fields: [subareaCompetenciaId], references: [id], onDelete: Cascade)
@@ -555,12 +606,14 @@ enum TipoInstitucionFinanciera {
 }
 
 model BancoCooperativa {
-  id            String                    @id @default(uuid()) @map("BANCO_COOPERATIVA_ID")
-  nombre        String                    @unique @map("NOMBRE")
-  tipo          TipoInstitucionFinanciera @default(BANCO) @map("TIPO")
-  activo        Boolean                   @default(true) @map("ESTADO_ACTIVO")
-  creadoEn      DateTime                  @default(now()) @map("FECHA_CREACION")
-  actualizadoEn DateTime                  @updatedAt @map("FECHA_ACTUALIZACION")
+  id              String                    @id @default(uuid()) @map("BANCO_COOPERATIVA_ID")
+  nombre          String                    @unique @map("NOMBRE")
+  tipo            TipoInstitucionFinanciera @default(BANCO) @map("TIPO")
+  activo          Boolean                   @default(true) @map("ESTADO_ACTIVO")
+  creadoEn        DateTime                  @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn   DateTime                  @updatedAt @db.Timestamptz @map("FECHA_ACTUALIZACION")
+  creadoPorId     String?                   @map("CREADO_POR")
+  modificadoPorId String?                   @map("MODIFICADO_POR")
 
   transacciones TransaccionPago[]
 
@@ -571,12 +624,16 @@ model PlanSuscripcion {
   id                           String   @id @map("PLAN_SUSCRIPCION_ID")
   nombre                       String   @map("NOMBRE_PLAN")
   descripcion                  String?  @map("DESCRIPCION_PLAN")
-  precioDolares                Float    @default(0.00) @map("PRECIO_DOLARES")
+  precioDolares                Decimal  @default(0.00) @db.Decimal(12, 2) @map("PRECIO_DOLARES")
   duracionDiasVigencia         Int      @map("DURACION_DIAS_VIGENCIA")
   limitePreguntasGratis        Int      @default(20) @map("LIMITE_PREGUNTAS_PRACTICA_GRATIS")
   accesoSimuladoresIlimitados  Boolean  @default(false) @map("ACCESO_SIMULADORES_ILIMITADOS")
   accesoAnaliticaAvanzada      Boolean  @default(false) @map("ACCESO_ANALITICA_AVANZADA")
   activo                       Boolean  @default(true) @map("ESTADO_PLAN_ACTIVO")
+  creadoEn                     DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn                DateTime @default(now()) @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  creadoPorId                  String?  @map("CREADO_POR")
+  modificadoPorId              String?  @map("MODIFICADO_POR")
 
   suscripciones SuscripcionUsuario[]
 
@@ -588,13 +645,15 @@ model SuscripcionUsuario {
   usuarioId                   String            @map("USUARIO_ID")
   planId                      String            @map("PLAN_SUSCRIPCION_ID")
   estado                      EstadoSuscripcion @default(PENDIENTE_PAGO) @map("ESTADO_SUSCRIPCION")
-  iniciaEn                    DateTime          @default(now()) @map("FECHA_INICIO_VIGENCIA")
-  expiraEn                    DateTime          @map("FECHA_FIN_VIGENCIA")
+  iniciaEn                    DateTime          @default(now()) @db.Timestamptz @map("FECHA_INICIO_VIGENCIA")
+  expiraEn                    DateTime          @db.Timestamptz @map("FECHA_FIN_VIGENCIA")
   preguntasGratisConsumidas   Int               @default(0) @map("PREGUNTAS_GRATIS_CONSUMIDAS")
   simuladoresGratisConsumidos Int               @default(0) @map("SIMULADORES_GRATIS_CONSUMIDOS")
-  creadoEn                    DateTime          @default(now()) @map("FECHA_CREACION")
+  creadoEn                    DateTime          @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn               DateTime?         @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  modificadoPorId             String?           @map("MODIFICADO_POR")
 
-  usuario       Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuario       Usuario           @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
   plan          PlanSuscripcion   @relation(fields: [planId], references: [id], onDelete: Restrict)
   transacciones TransaccionPago[]
 
@@ -609,16 +668,18 @@ model TransaccionPago {
   bancoCooperativaId           String?    @map("BANCO_COOPERATIVA_ID")
   entidadBancariaOrigen        String     @map("ENTIDAD_BANCARIA_ORIGEN")
   numeroComprobanteReferencia  String     @unique @map("NUMERO_COMPROBANTE_REFERENCIA")
-  montoDolares                 Float      @map("MONTO_TRANSACCION_DOLARES")
+  montoDolares                 Decimal    @db.Decimal(12, 2) @map("MONTO_TRANSACCION_DOLARES")
   urlFotoComprobante           String?    @map("URL_FOTO_COMPROBANTE")
   estado                       EstadoPago @default(PENDIENTE_VERIFICACION) @map("ESTADO_TRANSACCION")
   administradorAprobadorId     String?    @map("ADMINISTRADOR_APROBADOR_ID")
   motivoObservacionAdmin       String?    @db.Text @map("MOTIVO_OBSERVACION_ADMIN")
-  fechaPagoDeclarada           DateTime   @map("FECHA_PAGO_DECLARADA")
-  creadoEn                     DateTime   @default(now()) @map("FECHA_CREACION")
+  fechaPagoDeclarada           DateTime   @db.Timestamptz @map("FECHA_PAGO_DECLARADA")
+  creadoEn                     DateTime   @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn                DateTime?  @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  modificadoPorId              String?    @map("MODIFICADO_POR")
 
-  suscripcion            SuscripcionUsuario @relation(fields: [suscripcionUsuarioId], references: [id], onDelete: Cascade)
-  usuarioPagador         Usuario            @relation("TransaccionesPagador", fields: [usuarioPagadorId], references: [id], onDelete: Cascade)
+  suscripcion            SuscripcionUsuario @relation(fields: [suscripcionUsuarioId], references: [id], onDelete: Restrict)
+  usuarioPagador         Usuario            @relation("TransaccionesPagador", fields: [usuarioPagadorId], references: [id], onDelete: Restrict)
   administradorAprobador Usuario?           @relation("TransaccionesAdminAprobador", fields: [administradorAprobadorId], references: [id], onDelete: SetNull)
   bancoCooperativa       BancoCooperativa?  @relation(fields: [bancoCooperativaId], references: [id], onDelete: SetNull)
 
@@ -642,7 +703,9 @@ model AuditoriaOperacionSistema {
   motivoJustificacion            String?  @db.Text @map("MOTIVO_JUSTIFICACION")
   direccionIpCliente             String   @map("DIRECCION_IP_CLIENTE")
   agenteDispositivoUserAgent     String?  @db.Text @map("AGENTE_DISPOSITIVO_USER_AGENT")
-  fechaHoraRegistro              DateTime @default(now()) @map("FECHA_HORA_REGISTRO")
+  fechaHoraRegistro              DateTime @default(now()) @db.Timestamptz @map("FECHA_HORA_REGISTRO")
+  tipoActor                      String   @default("USUARIO") @map("TIPO_ACTOR")
+  modulo                         String?  @map("MODULO")
 
   usuarioOperador Usuario? @relation(fields: [usuarioOperadorId], references: [id], onDelete: SetNull)
 
@@ -660,7 +723,7 @@ model AuditoriaAccesoSeguridad {
   detalleObservacion  String?  @db.Text @map("DETALLE_OBSERVACION")
   direccionIpOrigen   String   @map("DIRECCION_IP_ORIGEN")
   agenteDispositivo   String?  @db.Text @map("AGENTE_DISPOSITIVO")
-  fechaHoraEvento     DateTime @default(now()) @map("FECHA_HORA_EVENTO")
+  fechaHoraEvento     DateTime @default(now()) @db.Timestamptz @map("FECHA_HORA_EVENTO")
 
   usuario Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
 
@@ -696,8 +759,7 @@ enum PaletaColor {
 }
 
 model PreferenciaAccesibilidad {
-  id                  String         @id @default(uuid()) @map("PREFERENCIA_ACCESIBILIDAD_ID")
-  usuarioId           String         @unique @map("USUARIO_ID")
+  usuarioId           String         @id @map("USUARIO_ID")
   tamanoTexto         TamanoTexto    @default(NORMAL) @map("TAMANO_TEXTO")
   altoContraste       Boolean        @default(false) @map("ALTO_CONTRASTE")
   fuenteDislexia      Boolean        @default(false) @map("FUENTE_DISLEXIA")
@@ -708,8 +770,9 @@ model PreferenciaAccesibilidad {
   lecturaGuiada       Boolean        @default(false) @map("LECTURA_GUIADA")
   paletaColor         PaletaColor    @default(ESTANDAR) @map("PALETA_COLOR")
   sintesisVozLectura  Boolean        @default(false) @map("SINTESIS_VOZ_LECTURA")
-  creadoEn            DateTime       @default(now()) @map("FECHA_CREACION")
-  actualizadoEn       DateTime       @updatedAt @map("FECHA_ACTUALIZACION")
+  creadoEn            DateTime       @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn       DateTime       @updatedAt @db.Timestamptz @map("FECHA_ACTUALIZACION")
+  modificadoPorId     String?        @map("MODIFICADO_POR")
 
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
@@ -721,27 +784,29 @@ model PreferenciaAccesibilidad {
 // ============================================================================
 
 model PreguntaFavorita {
-  id         String   @id @default(uuid()) @map("PREGUNTA_FAVORITA_ID")
-  usuarioId  String   @map("USUARIO_ID")
-  preguntaId String   @map("PREGUNTA_ID")
-  carpeta    String   @default("GENERAL") @map("CARPETA_CLASIFICACION")
-  creadoEn   DateTime @default(now()) @map("FECHA_GUARDADO")
+  usuarioId       String    @map("USUARIO_ID")
+  preguntaId      String    @map("PREGUNTA_ID")
+  carpeta         String    @default("GENERAL") @map("CARPETA_CLASIFICACION")
+  creadoEn        DateTime  @default(now()) @db.Timestamptz @map("FECHA_GUARDADO")
+  actualizadoEn   DateTime? @updatedAt @db.Timestamptz @map("FECHA_MODIFICACION")
+  modificadoPorId String?   @map("MODIFICADO_POR")
 
   usuario  Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   pregunta Pregunta @relation(fields: [preguntaId], references: [id], onDelete: Cascade)
 
-  @@unique([usuarioId, preguntaId])
+  @@id([usuarioId, preguntaId])
   @@index([usuarioId])
   @@map("PREGUNTAS_FAVORITAS")
 }
 
 model NotaEstudiantePregunta {
-  id            String   @id @default(uuid()) @map("NOTA_ESTUDIANTE_ID")
-  usuarioId     String   @map("USUARIO_ID")
-  preguntaId    String   @map("PREGUNTA_ID")
-  contenidoNota String   @db.Text @map("CONTENIDO_NOTA")
-  creadoEn      DateTime @default(now()) @map("FECHA_CREACION")
-  actualizadoEn DateTime @updatedAt @map("FECHA_ACTUALIZACION")
+  id              String   @id @default(uuid()) @map("NOTA_ESTUDIANTE_ID")
+  usuarioId       String   @map("USUARIO_ID")
+  preguntaId      String   @map("PREGUNTA_ID")
+  contenidoNota   String   @db.Text @map("CONTENIDO_NOTA")
+  creadoEn        DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
+  actualizadoEn   DateTime @updatedAt @db.Timestamptz @map("FECHA_ACTUALIZACION")
+  modificadoPorId String?  @map("MODIFICADO_POR")
 
   usuario  Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   pregunta Pregunta @relation(fields: [preguntaId], references: [id], onDelete: Cascade)
