@@ -1597,6 +1597,9 @@ export class AdminService {
         id: prog.id,
         nombre: prog.nombre,
         activo: prog.activo,
+        codigoBackend: prog.nombre.toUpperCase(),
+        codigoCorto: prog.nombre.slice(0, 4).toUpperCase(),
+        descripcion: `Submódulos clínicos y banco de preguntas de ${prog.nombre}.`,
         creadoEn: prog.creadoEn,
         totalSubmodulos: prog._count?.submodulos ?? prog.submodulos.length,
         totalPreguntas,
@@ -1876,10 +1879,17 @@ export class AdminService {
 
     if (programaId && programaId.trim()) {
       const progClean = programaId.trim().toUpperCase().replace('PROG-', '').replace('CACES-', '');
-      where.programaAcademicoId = {
-        contains: progClean,
-        mode: 'insensitive',
-      };
+      const progNum = Number(progClean);
+      if (!isNaN(progNum) && progClean !== '') {
+        where.OR = [
+          { programaAcademicoId: progNum },
+          { programa: { nombre: { contains: progClean, mode: 'insensitive' } } },
+        ];
+      } else {
+        where.programa = {
+          nombre: { contains: progClean, mode: 'insensitive' },
+        };
+      }
     }
 
     if (activo !== undefined) {

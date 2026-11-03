@@ -1,9 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +14,7 @@ import { JwtService } from '@nestjs/jwt';
 import { RolNombre } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { OAuth2Client } from 'google-auth-library';
+import { AuditoriaService } from '../auditoria/auditoria.service.js';
 import { PrismaService } from '../database/prisma.service.js';
 import {
   validarCedulaEcuatoriana,
@@ -27,10 +31,20 @@ import { RenovarTokenDto } from './dto/renovar-token.dto.js';
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
+  // Control de fuerza bruta en memoria por identificador (correo o cédula)
+  private readonly intentosFallidos = new Map<
+    string,
+    { contador: number; primerIntento: number; bloqueadoHasta?: number }
+  >();
+  private readonly MAX_INTENTOS_FALLIDOS = 5;
+  private readonly VENTANA_TIEMPO_MS = 15 * 60 * 1000; // 15 minutos de ventana
+  private readonly DURACION_BLOQUEO_MS = 15 * 60 * 1000; // 15 minutos de bloqueo
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private configService: ConfigService,
+    @Optional() private auditoriaService?: AuditoriaService,
   ) {}
 
   /**
@@ -228,9 +242,13 @@ export class AuthService {
   }
 
   /**
-   * Inicio de sesión de usuarios existentes (por correo o cédula)
+   * Inicio de sesión de usuarios existentes con protección contra fuerza bruta y auditoría
    */
-  async iniciarSesion(dto: LoginDto) {
+  async iniciarSesion(
+    dto: LoginDto,
+    ipOrigen = '127.0.0.1',
+    agente = 'Desconocido',
+  ) {
     const identificador = (dto.identificador || dto.correo || '').trim();
     const passwordPlano = dto.contrasena || dto.clave;
 
@@ -242,6 +260,37 @@ export class AuthService {
       throw new BadRequestException('Debe ingresar su contraseña');
     }
 
+    const claveRastreo = identificador.toLowerCase();
+    const ahora = Date.now();
+
+    // 1. Verificar si la cuenta/identificador se encuentra en bloqueo temporal por fuerza bruta
+    const intentoActual = this.intentosFallidos.get(claveRastreo);
+    if (intentoActual?.bloqueadoHasta && intentoActual.bloqueadoHasta > ahora) {
+      const minutosRestantes = Math.max(
+        1,
+        Math.ceil((intentoActual.bloqueadoHasta - ahora) / 60000),
+      );
+
+      await this.auditoriaService?.registrarAccesoSeguridad({
+        correoIngresado: identificador,
+        eventoSeguridad: 'BLOQUEO_FUERZA_BRUTA_ACTIVO',
+        accesoPermitido: false,
+        detalleObservacion: `Acceso denegado: cuenta temporalmente bloqueada. Tiempo restante: ${minutosRestantes} minuto(s).`,
+        direccionIpOrigen: ipOrigen,
+        agenteDispositivo: agente,
+      });
+
+      throw new HttpException(
+        {
+          exito: false,
+          codigoError: 'CUENTA_BLOQUEADA_TEMPORALMENTE',
+          mensaje: `Demasiados intentos fallidos. Por seguridad, el acceso a esta cuenta ha sido bloqueado temporalmente. Intente nuevamente en ${minutosRestantes} minuto(s).`,
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+
+    // 2. Buscar usuario en base de datos
     const usuario = await this.prisma.usuario.findFirst({
       where: {
         OR: [
@@ -259,10 +308,27 @@ export class AuthService {
     });
 
     if (!usuario) {
+      await this.auditoriaService?.registrarAccesoSeguridad({
+        correoIngresado: identificador,
+        eventoSeguridad: 'LOGIN_FALLIDO_USUARIO_INEXISTENTE',
+        accesoPermitido: false,
+        detalleObservacion: 'Identificador no registrado en la plataforma.',
+        direccionIpOrigen: ipOrigen,
+        agenteDispositivo: agente,
+      });
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
     if (!usuario.activo) {
+      await this.auditoriaService?.registrarAccesoSeguridad({
+        usuarioId: usuario.id,
+        correoIngresado: identificador,
+        eventoSeguridad: 'LOGIN_FALLIDO_CUENTA_DESACTIVADA',
+        accesoPermitido: false,
+        detalleObservacion: 'Intento de inicio de sesión en cuenta desactivada.',
+        direccionIpOrigen: ipOrigen,
+        agenteDispositivo: agente,
+      });
       throw new UnauthorizedException('La cuenta se encuentra desactivada');
     }
 
@@ -272,14 +338,80 @@ export class AuthService {
       );
     }
 
+    // 3. Verificación criptográfica de contraseña
     const contrasenaValida = await bcrypt.compare(
       passwordPlano,
       usuario.contrasenaHash,
     );
 
     if (!contrasenaValida) {
-      throw new UnauthorizedException('Credenciales inválidas');
+      // Registrar intento fallido
+      let registro = this.intentosFallidos.get(claveRastreo);
+      if (
+        !registro ||
+        ahora - registro.primerIntento > this.VENTANA_TIEMPO_MS
+      ) {
+        registro = { contador: 1, primerIntento: ahora };
+      } else {
+        registro.contador += 1;
+      }
+
+      // Si alcanzó el umbral de fuerza bruta, bloquear la cuenta por 15 minutos
+      if (registro.contador >= this.MAX_INTENTOS_FALLIDOS) {
+        registro.bloqueadoHasta = ahora + this.DURACION_BLOQUEO_MS;
+        this.intentosFallidos.set(claveRastreo, registro);
+
+        await this.auditoriaService?.registrarAccesoSeguridad({
+          usuarioId: usuario.id,
+          correoIngresado: identificador,
+          eventoSeguridad: 'CUENTA_BLOQUEADA_FUERZA_BRUTA',
+          accesoPermitido: false,
+          detalleObservacion: `Cuenta bloqueada por 15 minutos tras ${registro.contador} intentos erróneos consecutivos.`,
+          direccionIpOrigen: ipOrigen,
+          agenteDispositivo: agente,
+        });
+
+        throw new HttpException(
+          {
+            exito: false,
+            codigoError: 'CUENTA_BLOQUEADA_TEMPORALMENTE',
+            mensaje:
+              'Ha superado el límite de 5 intentos fallidos consecutivos. Por motivos de seguridad, su cuenta ha sido bloqueada temporalmente durante 15 minutos.',
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+
+      this.intentosFallidos.set(claveRastreo, registro);
+      const restantes = this.MAX_INTENTOS_FALLIDOS - registro.contador;
+
+      await this.auditoriaService?.registrarAccesoSeguridad({
+        usuarioId: usuario.id,
+        correoIngresado: identificador,
+        eventoSeguridad: 'LOGIN_FALLIDO_CONTRASENA_ERRONEA',
+        accesoPermitido: false,
+        detalleObservacion: `Contraseña incorrecta. Intento ${registro.contador} de ${this.MAX_INTENTOS_FALLIDOS}.`,
+        direccionIpOrigen: ipOrigen,
+        agenteDispositivo: agente,
+      });
+
+      throw new UnauthorizedException(
+        `Credenciales inválidas. Le quedan ${restantes} intento(s) antes del bloqueo temporal.`,
+      );
     }
+
+    // 4. Inicio de sesión exitoso: reiniciar contador de fallos
+    this.intentosFallidos.delete(claveRastreo);
+
+    await this.auditoriaService?.registrarAccesoSeguridad({
+      usuarioId: usuario.id,
+      correoIngresado: identificador,
+      eventoSeguridad: 'LOGIN_EXITOSO',
+      accesoPermitido: true,
+      detalleObservacion: 'Autenticación con contraseña válida.',
+      direccionIpOrigen: ipOrigen,
+      agenteDispositivo: agente,
+    });
 
     const roles = usuario.roles.map((r) => r.rol.nombre);
     const tokens = await this.generarYGuardarTokens(

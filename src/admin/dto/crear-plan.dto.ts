@@ -12,14 +12,18 @@ import {
 import { EsTextoCoherente } from '../../common/index.js';
 
 export class CrearPlanDto {
-  @ApiProperty({ example: 1, description: 'ID numérico del plan (opcional, autoincremental si no se envía)', required: false })
+  @ApiProperty({ example: 1, description: 'ID numérico del plan (opcional, autoincremental si no se envía o si es texto)', required: false })
   @IsOptional()
   @IsNumber({}, { message: 'El ID del plan debe ser un número' })
-  @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' && value.trim() !== '' && !isNaN(Number(value))
-      ? Number(value)
-      : value,
-  )
+  @Transform(({ value }: { value: unknown }) => {
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return undefined;
+      const parsed = Number(trimmed);
+      return !isNaN(parsed) ? parsed : undefined;
+    }
+    return typeof value === 'number' ? value : undefined;
+  })
   id?: number;
 
   @ApiProperty({ example: 'Plan Semestral Pro', description: 'Nombre comercial del plan' })
