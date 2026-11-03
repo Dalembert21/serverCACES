@@ -36,8 +36,15 @@ import { AppService } from './app.service.js';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => [
         {
+          name: 'default',
           ttl: config.get<number>('app.rateLimit.ttl', 60) * 1000,
           limit: config.get<number>('app.rateLimit.limite', 100),
+        },
+        {
+          name: 'auth',
+          ttl: 60 * 1000, // 60 segundos
+          limit: 5, // Máximo 5 intentos de autenticación por minuto por IP
+          blockDuration: 5 * 60 * 1000, // Si excede 5 intentos, bloqueado por 5 minutos
         },
       ],
     }),

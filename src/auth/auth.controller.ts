@@ -14,6 +14,7 @@ import {
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { Throttle } from '@nestjs/throttler';
 import { UsuarioActual } from '../common/decorators/usuario-actual.decorator.js';
 import type { UsuarioAutenticado } from '../common/interfaces/usuario-autenticado.interface.js';
 import { AuthService } from './auth.service.js';
@@ -81,6 +82,7 @@ export class AuthController {
     };
   }
 
+  @Throttle({ auth: { limit: 5, ttl: 60000, blockDuration: 300000 } })
   @Post('registro')
   @ApiOperation({
     summary: 'Registrar un nuevo estudiante',
@@ -99,12 +101,13 @@ export class AuthController {
     return this.authService.registrar(dto);
   }
 
+  @Throttle({ auth: { limit: 5, ttl: 60000, blockDuration: 300000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Iniciar sesión',
+    summary: 'Iniciar sesión con protección contra fuerza bruta',
     description:
-      'Valida credenciales de acceso de cualquier rol (Superadmin, Tesorería, Estudiante) y devuelve tokens JWT.',
+      'Valida credenciales de acceso de cualquier rol (Superadmin, Tesorería, Estudiante) y devuelve tokens JWT. Cuenta con límite de 5 intentos por minuto y bloqueo temporal tras 5 fallos consecutivos.',
   })
   @ApiResponse({
     status: 200,
@@ -114,8 +117,18 @@ export class AuthController {
     status: 401,
     description: 'Credenciales inválidas o cuenta inactiva.',
   })
-  async login(@Body() dto: LoginDto) {
-    return this.authService.iniciarSesion(dto);
+  @ApiResponse({
+    status: 429,
+    description: 'Demasiados intentos fallidos (Bloqueo temporal por fuerza bruta).',
+  })
+  async login(@Req() req: any, @Body() dto: LoginDto) {
+    const ip =
+      req.ip ||
+      req.headers?.['x-forwarded-for'] ||
+      req.socket?.remoteAddress ||
+      '127.0.0.1';
+    const userAgent = req.headers?.['user-agent'] || 'Desconocido';
+    return this.authService.iniciarSesion(dto, String(ip), String(userAgent));
   }
 
   @Post('renovar-token')

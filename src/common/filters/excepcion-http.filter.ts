@@ -32,11 +32,28 @@ export class ExcepcionHttpFilter implements ExceptionFilter {
       } else if (typeof res === 'object' && res !== null) {
         const respuestaObj = res as Record<string, unknown>;
         mensaje =
+          (respuestaObj.mensaje as string) ||
           (respuestaObj.message as string) ||
           (respuestaObj.error as string) ||
           mensaje;
         detalles = respuestaObj.message || respuestaObj;
-        codigoError = (respuestaObj.error as string) || `HTTP_${status}`;
+        codigoError =
+          (respuestaObj.codigoError as string) ||
+          (respuestaObj.error as string) ||
+          `HTTP_${status}`;
+      }
+
+      if (status === HttpStatus.TOO_MANY_REQUESTS) {
+        if (!codigoError || codigoError.startsWith('HTTP_')) {
+          codigoError = 'LIMITE_PETICIONES_EXCEDIDO';
+        }
+        if (
+          mensaje.toLowerCase().includes('throttler') ||
+          mensaje.toLowerCase().includes('too many requests')
+        ) {
+          mensaje =
+            'Ha superado el límite de intentos permitidos. Por motivos de seguridad, espere unos momentos antes de volver a intentar.';
+        }
       }
     } else if (
       typeof exception === 'object' &&

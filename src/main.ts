@@ -13,6 +13,10 @@ async function bootstrap() {
   const logger = new Logger('Bootstrap');
   const app = await NestFactory.create(AppModule);
 
+  // Seguridad: Confianza en Proxy Inverso (Render / Cloudflare) para detección certera de IP del cliente
+  const expressApp = app.getHttpAdapter().getInstance();
+  expressApp.set('trust proxy', 1);
+
   const configService = app.get(ConfigService);
   const puerto = configService.get<number>('app.puerto', 3000);
   const prefijo = configService.get<string>('app.prefijoApi', 'api/v1');
