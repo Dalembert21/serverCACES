@@ -20,13 +20,16 @@ export class CompletarPerfilDto {
 
 
   @ApiProperty({
-    example: 'prog-medicina',
-    description: 'Identificador del programa académico oficial CACES',
+    example: 1,
+    description: 'Identificador del programa académico oficial CACES (número o nombre de carrera)',
   })
-  @IsString({ message: 'El programa activo debe ser una cadena de texto' })
   @IsNotEmpty({ message: 'El programa académico es obligatorio' })
   @Transform(({ value }: { value: unknown }) =>
-    typeof value === 'string' ? value.trim() : value,
+    typeof value === 'string' && value.trim() !== '' && !isNaN(Number(value))
+      ? Number(value)
+      : typeof value === 'string'
+      ? value.trim()
+      : value,
   )
-  programaActivoId: string;
+  programaActivoId: number | string;
 }

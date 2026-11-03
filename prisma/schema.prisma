@@ -28,7 +28,7 @@ model Usuario {
   telefonoContacto     String?  @map("TELEFONO_CONTACTO")
   activo               Boolean  @default(true) @map("ESTADO_CUENTA_ACTIVA")
   correoVerificado     Boolean  @default(false) @map("CORREO_CONFIRMADO")
-  programaActivoId     String?  @map("PROGRAMA_ACTIVO_ID")
+  programaActivoId     Int?     @map("PROGRAMA_ACTIVO_ID")
   googleId             String?  @unique @map("GOOGLE_ID")
   fotoUrl              String?  @map("FOTO_URL")
   proveedorAuth        String   @default("local") @map("PROVEEDOR_AUTH")
@@ -103,7 +103,7 @@ model Departamento {
 }
 
 model Rol {
-  id            String       @id @map("ROL_ID")
+  id            Int          @id @default(autoincrement()) @map("ROL_ID")
   nombre        RolNombre    @unique @map("NOMBRE_ROL")
   descripcion   String?      @map("DESCRIPCION_ROL")
   activo        Boolean      @default(true) @map("ESTADO_ROL_ACTIVO")
@@ -116,7 +116,7 @@ model Rol {
 
 model UsuarioRol {
   usuarioId     String   @map("USUARIO_ID")
-  rolId         String   @map("ROL_ID")
+  rolId         Int      @map("ROL_ID")
   asignadoEn    DateTime @default(now()) @db.Timestamptz @map("FECHA_ASIGNACION")
   asignadoPorId String?  @map("ASIGNADO_POR_ID")
 
@@ -162,7 +162,7 @@ model TokenRecuperacionContrasena {
 // ============================================================================
 
 model ProgramaAcademico {
-  id                  String   @id @default(uuid()) @map("PROGRAMA_ACADEMICO_ID")
+  id                  Int      @id @default(autoincrement()) @map("PROGRAMA_ACADEMICO_ID")
   nombre              String   @unique @map("NOMBRE_PROGRAMA")
   activo              Boolean  @default(true) @map("ESTADO_PROGRAMA_ACTIVO")
   creadoEn            DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
@@ -180,7 +180,7 @@ model ProgramaAcademico {
 
 model SubmoduloAcademico {
   id                  String   @id @default(uuid()) @map("SUBMODULO_ACADEMICO_ID")
-  programaAcademicoId String   @map("PROGRAMA_ACADEMICO_ID")
+  programaAcademicoId Int      @map("PROGRAMA_ACADEMICO_ID")
   nombre              String   @map("NOMBRE_SUBMODULO")
   descripcion         String?  @map("DESCRIPCION_SUBMODULO")
   orden               Int      @default(0) @map("ORDEN_VISUALIZACION")
@@ -200,7 +200,7 @@ model SubmoduloAcademico {
 
 model TemarioVersion {
   id                   String    @id @default(uuid()) @map("VERSION_TEMARIO_ID")
-  programaAcademicoId  String    @map("PROGRAMA_ACADEMICO_ID")
+  programaAcademicoId  Int       @map("PROGRAMA_ACADEMICO_ID")
   codigoVersion        String    @map("CODIGO_VERSION")
   fechaInicioVigencia  DateTime  @default(now()) @db.Timestamptz @map("FECHA_INICIO_VIGENCIA")
   fechaFinVigencia     DateTime? @db.Timestamptz @map("FECHA_FIN_VIGENCIA")
@@ -468,7 +468,7 @@ enum EstadoIntento {
 
 model ConfiguracionSimulador {
   id                   String        @id @default(uuid()) @map("CONFIGURACION_SIMULADOR_ID")
-  programaAcademicoId  String        @map("PROGRAMA_ACADEMICO_ID")
+  programaAcademicoId  Int           @map("PROGRAMA_ACADEMICO_ID")
   titulo               String        @map("TITULO_SIMULADOR")
   modalidad            TipoSimulador @default(SIMULACRO_OFICIAL) @map("MODALIDAD_SIMULADOR")
   duracionMinutos      Int           @map("DURACION_LIMITE_MINUTOS")
@@ -621,7 +621,7 @@ model BancoCooperativa {
 }
 
 model PlanSuscripcion {
-  id                           String   @id @map("PLAN_SUSCRIPCION_ID")
+  id                           Int      @id @default(autoincrement()) @map("PLAN_SUSCRIPCION_ID")
   nombre                       String   @map("NOMBRE_PLAN")
   descripcion                  String?  @map("DESCRIPCION_PLAN")
   precioDolares                Decimal  @default(0.00) @db.Decimal(12, 2) @map("PRECIO_DOLARES")
@@ -643,7 +643,7 @@ model PlanSuscripcion {
 model SuscripcionUsuario {
   id                          String            @id @default(uuid()) @map("SUSCRIPCION_USUARIO_ID")
   usuarioId                   String            @map("USUARIO_ID")
-  planId                      String            @map("PLAN_SUSCRIPCION_ID")
+  planId                      Int               @map("PLAN_SUSCRIPCION_ID")
   estado                      EstadoSuscripcion @default(PENDIENTE_PAGO) @map("ESTADO_SUSCRIPCION")
   iniciaEn                    DateTime          @default(now()) @db.Timestamptz @map("FECHA_INICIO_VIGENCIA")
   expiraEn                    DateTime          @db.Timestamptz @map("FECHA_FIN_VIGENCIA")

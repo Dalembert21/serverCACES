@@ -19,16 +19,17 @@ export class SimuladoresService {
    * Obtiene la configuración oficial del simulacro para una carrera
    */
   async obtenerConfiguracion(programaId: string) {
-    const cleanId = programaId.toUpperCase().replace('PROG-', '').replace('CACES-', '');
+    const cleanId = (programaId || '').toUpperCase().replace('PROG-', '').replace('CACES-', '').trim();
+    const cleanNum = Number(cleanId);
 
     const config = await this.prisma.configuracionSimulador.findFirst({
       where: {
         activo: true,
         programa: {
-          id: {
-            contains: cleanId,
-            mode: 'insensitive',
-          },
+          OR: [
+            ...(isNaN(cleanNum) ? [] : [{ id: cleanNum }]),
+            { nombre: { contains: cleanId, mode: 'insensitive' } },
+          ],
         },
       },
       include: {

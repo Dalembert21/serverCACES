@@ -1,7 +1,7 @@
 export function obtenerDatosComerciales() {
   const planes = [
     {
-      id: 'PLAN_GRATUITO_BASE',
+      id: 1,
       nombre: 'Acceso Gratuito',
       descripcion:
         'Evaluación diagnóstica inicial sin costo para conocer el sistema. Incluye 20 reactivos con justificación y muestra de simulador.',
@@ -13,7 +13,7 @@ export function obtenerDatosComerciales() {
       activo: true,
     },
     {
-      id: 'PLAN_PRO_MENSUAL',
+      id: 2,
       nombre: 'Suscripción Mensual Pro',
       descripcion:
         'Preparación intensiva individual con renovación mensual flexible. Banco ilimitado de reactivos, simuladores tipo examen oficial y justificaciones del MSP.',
@@ -25,7 +25,7 @@ export function obtenerDatosComerciales() {
       activo: true,
     },
     {
-      id: 'PLAN_TRIMESTRAL_PRO',
+      id: 3,
       nombre: 'Pase CACES Trimestral',
       descripcion:
         'Recomendado — Ahorro del 25%. Ciclo estructurado de 90 días para el internado y la recta final del examen. Acceso ilimitado, resúmenes imprimibles y soporte académico.',
@@ -37,7 +37,7 @@ export function obtenerDatosComerciales() {
       activo: true,
     },
     {
-      id: 'PLAN_DUO_CACES',
+      id: 4,
       nombre: 'Plan Dúo CACES',
       descripcion:
         'Parejas de Estudio: Dos cuentas Pro 100% independientes con correo y clave propia ($9.99/mes por estudiante en un solo pago de $19.99). Sin mezclar telemetría.',

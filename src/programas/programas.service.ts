@@ -59,7 +59,7 @@ export class ProgramasService {
         orden: s.orden,
       }));
 
-      const baseId = (prog.id || '').toLowerCase().replace('caces-', '').replace('prog-', '');
+      const baseId = String(prog.id ?? '').toLowerCase();
       const idFrontend = `prog-${baseId}`;
       const codigoCaces = `caces-${baseId}`;
 
@@ -95,14 +95,14 @@ export class ProgramasService {
 
   async obtenerEstructuraPrograma(id: string) {
     const progLimpio = id.trim();
+    const progNum = Number(progLimpio.replace(/^(prog-|caces-)/i, ''));
     const programa = await this.prisma.programaAcademico.findFirst({
       where: {
         activo: true,
         OR: [
-          { id: progLimpio },
-          { id: progLimpio.toUpperCase() },
-          { id: `caces-${progLimpio.toLowerCase().replace('prog-', '')}` },
+          ...(isNaN(progNum) ? [] : [{ id: progNum }]),
           { nombre: { equals: progLimpio, mode: 'insensitive' } },
+          { nombre: { contains: progLimpio.replace(/^(prog-|caces-)/i, ''), mode: 'insensitive' } },
         ],
       },
       include: {

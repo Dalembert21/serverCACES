@@ -121,6 +121,31 @@ export class AuthService {
       [dto.nombre?.trim(), dto.apellido?.trim()].filter(Boolean).join(' ') ||
       'Estudiante CACES';
 
+    // Resolver programa académico inicial si es provisto
+    let programaActivoId: number | null = null;
+    if (dto.programaInicialId) {
+      const progNum = Number(dto.programaInicialId);
+      const prog = await this.prisma.programaAcademico.findFirst({
+        where: {
+          OR: [
+            ...(isNaN(progNum) ? [] : [{ id: progNum }]),
+            { nombre: { equals: dto.programaInicialId.trim(), mode: 'insensitive' } },
+            { nombre: { contains: dto.programaInicialId.replace(/^(prog-|caces-)/i, ''), mode: 'insensitive' } },
+          ],
+        },
+      });
+      if (prog) {
+        programaActivoId = prog.id;
+      }
+    }
+    if (!programaActivoId) {
+      const primerProg = await this.prisma.programaAcademico.findFirst({
+        where: { activo: true },
+        orderBy: { id: 'asc' },
+      });
+      programaActivoId = primerProg?.id || null;
+    }
+
     // Creación transaccional: Usuario + Asignación de Rol + Suscripción Inicial Gratuita
     const nuevoUsuario = await this.prisma.$transaction(async (tx) => {
       const usuario = await tx.usuario.create({
@@ -131,7 +156,7 @@ export class AuthService {
           apellido: dto.apellido?.trim() || null,
           nombreCompleto,
           contrasenaHash,
-          programaActivoId: dto.programaInicialId || 'prog-medicina',
+          programaActivoId,
           proveedorAuth: 'local',
           correoVerificado: false,
         },
@@ -148,17 +173,24 @@ export class AuthService {
       const expiraEn = new Date();
       expiraEn.setDate(expiraEn.getDate() + 365);
 
-      await tx.suscripcionUsuario.create({
-        data: {
-          usuarioId: usuario.id,
-          planId: 'PLAN_GRATUITO_BASE',
-          estado: 'ACTIVA',
-          iniciaEn: new Date(),
-          expiraEn,
-          preguntasGratisConsumidas: 0,
-          simuladoresGratisConsumidos: 0,
-        },
+      const planGratuito = await tx.planSuscripcion.findFirst({
+        where: { precioDolares: 0 },
+        orderBy: { id: 'asc' },
       });
+
+      if (planGratuito) {
+        await tx.suscripcionUsuario.create({
+          data: {
+            usuarioId: usuario.id,
+            planId: planGratuito.id,
+            estado: 'ACTIVA',
+            iniciaEn: new Date(),
+            expiraEn,
+            preguntasGratisConsumidas: 0,
+            simuladoresGratisConsumidos: 0,
+          },
+        });
+      }
 
       return usuario;
     });
@@ -528,17 +560,24 @@ export class AuthService {
         const expiraEn = new Date();
         expiraEn.setDate(expiraEn.getDate() + 365);
 
-        await tx.suscripcionUsuario.create({
-          data: {
-            usuarioId: nuevo.id,
-            planId: 'PLAN_GRATUITO_BASE',
-            estado: 'ACTIVA',
-            iniciaEn: new Date(),
-            expiraEn,
-            preguntasGratisConsumidas: 0,
-            simuladoresGratisConsumidos: 0,
-          },
+        const planGratuito = await tx.planSuscripcion.findFirst({
+          where: { precioDolares: 0 },
+          orderBy: { id: 'asc' },
         });
+
+        if (planGratuito) {
+          await tx.suscripcionUsuario.create({
+            data: {
+              usuarioId: nuevo.id,
+              planId: planGratuito.id,
+              estado: 'ACTIVA',
+              iniciaEn: new Date(),
+              expiraEn,
+              preguntasGratisConsumidas: 0,
+              simuladoresGratisConsumidos: 0,
+            },
+          });
+        }
 
         return tx.usuario.findUnique({
           where: { id: nuevo.id },
@@ -654,12 +693,29 @@ export class AuthService {
       );
     }
 
-    // 2. Actualizar datos en la base de datos
+    // 2. Resolver programa académico válido
+    let programaActivoId: number | null = null;
+    const progStr = String(dto.programaActivoId || '').trim();
+    const progNum = Number(progStr);
+    const prog = await this.prisma.programaAcademico.findFirst({
+      where: {
+        OR: [
+          ...(isNaN(progNum) ? [] : [{ id: progNum }]),
+          { nombre: { equals: progStr, mode: 'insensitive' } },
+          { nombre: { contains: progStr.replace(/^(prog-|caces-)/i, ''), mode: 'insensitive' } },
+        ],
+      },
+    });
+    if (prog) {
+      programaActivoId = prog.id;
+    }
+
+    // 3. Actualizar datos en la base de datos
     const usuarioActualizado = await this.prisma.usuario.update({
       where: { id: usuarioId },
       data: {
         cedula: cedulaLimpia,
-        programaActivoId: dto.programaActivoId.trim(),
+        programaActivoId,
       },
       include: {
         roles: {
