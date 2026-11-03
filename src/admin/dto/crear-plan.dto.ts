@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
   Min,
 } from 'class-validator';
 import { EsTextoCoherente } from '../../common/index.js';
@@ -14,6 +15,7 @@ export class CrearPlanDto {
   @ApiProperty({ example: 'PLAN_SEMESTRAL_PRO', description: 'Código único identificador del plan' })
   @IsString({ message: 'El ID del plan debe ser texto' })
   @IsNotEmpty({ message: 'El ID del plan es obligatorio' })
+  @Matches(/^[A-Z0-9_-]{3,35}$/, { message: 'El ID del plan debe contener solo letras mayúsculas, números o guiones (sin puntos ni símbolos incoherentes)' })
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim().toUpperCase() : value,
   )
@@ -34,6 +36,7 @@ export class CrearPlanDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
+  @EsTextoCoherente(5, { message: 'La descripción debe ser coherente y tener al menos 5 caracteres' })
   descripcion?: string;
 
   @ApiProperty({ example: 49.99, description: 'Precio en dólares estadounidenses' })

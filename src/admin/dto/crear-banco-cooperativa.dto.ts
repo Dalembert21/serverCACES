@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
@@ -9,6 +10,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { TipoInstitucionFinanciera } from '@prisma/client';
+import { EsTextoCoherente } from '../../common/index.js';
 
 export class CrearBancoCooperativaDto {
   @ApiProperty({
@@ -19,6 +21,12 @@ export class CrearBancoCooperativaDto {
   @IsNotEmpty({ message: 'El nombre es obligatorio' })
   @MinLength(3, { message: 'El nombre debe tener al menos 3 caracteres' })
   @MaxLength(100, { message: 'El nombre no puede exceder 100 caracteres' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @EsTextoCoherente(3, {
+    message: 'El nombre de la entidad financiera debe tener texto coherente (sin puntos ni símbolos solos)',
+  })
   nombre: string;
 
   @ApiPropertyOptional({

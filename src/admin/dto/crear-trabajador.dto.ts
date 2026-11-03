@@ -9,6 +9,12 @@ import {
   MinLength,
 } from 'class-validator';
 import { RolNombre } from '@prisma/client';
+import {
+  EsCedulaEcuatoriana,
+  EsClaveSegura,
+  EsNombrePersona,
+  EsTextoCoherente,
+} from '../../common/index.js';
 
 export class CrearTrabajadorDto {
   @ApiProperty({
@@ -29,6 +35,7 @@ export class CrearTrabajadorDto {
   @IsString({ message: 'La contraseña debe ser una cadena' })
   @IsNotEmpty({ message: 'La contraseña es obligatoria' })
   @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  @EsClaveSegura({ message: 'La contraseña debe ser una combinación segura y coherente (letras y números sin secuencias idénticas)' })
   contrasena: string;
 
   @ApiProperty({
@@ -40,6 +47,7 @@ export class CrearTrabajadorDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
+  @EsNombrePersona({ message: 'El nombre debe ser un nombre personal válido' })
   nombre: string;
 
   @ApiProperty({
@@ -51,6 +59,7 @@ export class CrearTrabajadorDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
+  @EsNombrePersona({ message: 'El apellido debe ser un apellido personal válido' })
   apellido: string;
 
   @ApiPropertyOptional({
@@ -62,6 +71,7 @@ export class CrearTrabajadorDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
+  @EsCedulaEcuatoriana({ message: 'La cédula ecuatoriana ingresada no es válida' })
   cedula?: string;
 
   @ApiPropertyOptional({
@@ -91,6 +101,7 @@ export class CrearTrabajadorDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
+  @EsTextoCoherente(3, { message: 'El cargo debe contener al menos 3 caracteres coherentes' })
   cargo: string;
 
   @ApiPropertyOptional({

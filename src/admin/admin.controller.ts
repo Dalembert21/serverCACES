@@ -370,6 +370,16 @@ export class AdminController {
   // 5. CRUD DE PROGRAMAS ACADÉMICOS Y ÁREAS TEMÁTICAS CACES
   // ============================================================================
 
+  @Get('programas')
+  @Roles(RolNombre.SUPERADMIN, RolNombre.TESORERIA)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Listar todos los programas académicos (activos e inactivos) con métricas reales',
+  })
+  async listarProgramas() {
+    return this.adminService.listarProgramasAcademicos();
+  }
+
   @Post('programas')
   @Roles(RolNombre.SUPERADMIN)
   @HttpCode(HttpStatus.CREATED)

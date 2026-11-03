@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator';
+import { EsCodigoReferencia, EsTextoCoherente } from '../../common/index.js';
 
 export class ActivarPlanProDto {
   @ApiPropertyOptional({
@@ -21,6 +22,10 @@ export class ActivarPlanProDto {
   })
   @IsOptional()
   @IsString({ message: 'El banco debe ser una cadena de texto' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @EsTextoCoherente(3, { message: 'El nombre del banco debe ser texto coherente' })
   banco?: string;
 
   @ApiPropertyOptional({
@@ -29,6 +34,10 @@ export class ActivarPlanProDto {
   })
   @IsOptional()
   @IsString({ message: 'El número de referencia debe ser texto' })
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.trim() : value,
+  )
+  @EsCodigoReferencia({ message: 'La referencia debe ser un código alfanumérico coherente' })
   numeroReferencia?: string;
 
   @ApiPropertyOptional({

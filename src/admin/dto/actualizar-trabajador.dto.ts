@@ -2,6 +2,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsBoolean, IsEmail, IsEnum, IsOptional, IsString } from 'class-validator';
 import { RolNombre } from '@prisma/client';
+import { EsNombrePersona, EsTextoCoherente } from '../../common/index.js';
 
 export class ActualizarTrabajadorDto {
   @ApiPropertyOptional({
@@ -24,6 +25,7 @@ export class ActualizarTrabajadorDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
+  @EsNombrePersona({ message: 'El nombre debe ser un nombre personal válido' })
   nombre?: string;
 
   @ApiPropertyOptional({
@@ -35,6 +37,7 @@ export class ActualizarTrabajadorDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
+  @EsNombrePersona({ message: 'El apellido debe ser un apellido personal válido' })
   apellido?: string;
 
   @ApiPropertyOptional({
@@ -76,6 +79,7 @@ export class ActualizarTrabajadorDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
+  @EsTextoCoherente(3, { message: 'El cargo debe contener al menos 3 caracteres coherentes' })
   cargo?: string;
 
   @ApiPropertyOptional({

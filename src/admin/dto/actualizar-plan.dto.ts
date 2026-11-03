@@ -25,6 +25,7 @@ export class ActualizarPlanDto {
   @Transform(({ value }: { value: unknown }) =>
     typeof value === 'string' ? value.trim() : value,
   )
+  @EsTextoCoherente(5, { message: 'La descripción debe tener al menos 5 caracteres coherentes' })
   descripcion?: string;
 
   @ApiProperty({ example: 59.99, required: false })
