@@ -49,3 +49,12 @@ logs
 !.vscode/extensions.json
 .DS_Store
 Thumbs.db
+
+# Scripts de mantenimiento, temporales y generados a petición
+/scripts/*
+!/scripts/apply-architecture-optimization.ts
+!/scripts/apply-audit-migration.ts
+!/scripts/test-db-connection.ts
+temp-*.ts
+temp-*.js
+
