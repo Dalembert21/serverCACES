@@ -26,6 +26,7 @@ export class SimuladoresService {
       where: {
         activo: true,
         programa: {
+          activo: true,
           OR: [
             ...(isNaN(cleanNum) ? [] : [{ id: cleanNum }]),
             { nombre: { contains: cleanId, mode: 'insensitive' } },
@@ -39,9 +40,15 @@ export class SimuladoresService {
     });
 
     if (!config) {
-      // Fallback a la primera configuración disponible
+      if (cleanId) {
+        throw new NotFoundException(
+          `El módulo académico "${programaId}" no está disponible o se encuentra actualmente inactivo/suspendido.`,
+        );
+      }
+
+      // Fallback a la primera configuración disponible si no se especificó programa
       const fallback = await this.prisma.configuracionSimulador.findFirst({
-        where: { activo: true },
+        where: { activo: true, programa: { activo: true } },
         include: { programa: true },
       });
 

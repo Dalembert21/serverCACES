@@ -13,7 +13,7 @@ export class ProgramasService {
       include: {
         submodulos: {
           where: { activo: true },
-          orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+          orderBy: { nombre: 'asc' },
         },
         configuracionesSimulador: {
           where: { activo: true },
@@ -56,7 +56,6 @@ export class ProgramasService {
         id: s.id,
         nombre: s.nombre,
         descripcion: s.descripcion,
-        orden: s.orden,
       }));
 
       const baseId = String(prog.id ?? '').toLowerCase();
@@ -108,7 +107,7 @@ export class ProgramasService {
       include: {
         submodulos: {
           where: { activo: true },
-          orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+          orderBy: { nombre: 'asc' },
           include: {
             _count: {
               select: { preguntas: true },
@@ -139,7 +138,6 @@ export class ProgramasService {
       id: sub.id,
       nombre: sub.nombre,
       descripcion: sub.descripcion,
-      orden: sub.orden,
       totalPreguntas: sub._count.preguntas,
     }));
 
