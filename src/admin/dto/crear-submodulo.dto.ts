@@ -2,11 +2,9 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsBoolean,
-  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
-  Min,
 } from 'class-validator';
 import { EsTextoCoherente } from '../../common/index.js';
 
@@ -50,17 +48,6 @@ export class CrearSubmoduloDto {
   descripcion?: string;
 
   @ApiProperty({
-    example: 1,
-    description: 'Orden numérico de visualización',
-    required: false,
-    default: 0,
-  })
-  @IsOptional()
-  @IsInt({ message: 'El orden de visualización debe ser un número entero' })
-  @Min(0, { message: 'El orden no puede ser negativo' })
-  orden?: number;
-
-  @ApiProperty({
     example: true,
     description: 'Estado inicial del submódulo',
     required: false,
@@ -70,4 +57,3 @@ export class CrearSubmoduloDto {
   @IsBoolean({ message: 'El estado debe ser booleano' })
   activo?: boolean;
 }
-

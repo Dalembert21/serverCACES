@@ -39,6 +39,9 @@ describe('AdminService - Gestión de Submódulos Académicos y Preguntas', () =>
     subareaCompetencia: {
       findFirst: jest.fn(),
     },
+    usuario: {
+      findMany: jest.fn().mockResolvedValue([]),
+    },
     $transaction: jest.fn((cb) => cb(mockPrismaService)),
   };
 
@@ -70,7 +73,6 @@ describe('AdminService - Gestión de Submódulos Académicos y Preguntas', () =>
         programaAcademicoId: 'MEDICINA',
         nombre: 'Cardiología',
         descripcion: 'Enfermedades cardíacas',
-        orden: 1,
         activo: true,
         creadoEn: new Date(),
         programa: { nombre: 'Medicina Humana' },
@@ -80,7 +82,6 @@ describe('AdminService - Gestión de Submódulos Académicos y Preguntas', () =>
         programaAcademicoId: 'MEDICINA',
         nombre: '   Cardiología   ',
         descripcion: 'Enfermedades cardíacas',
-        orden: 1,
       });
 
       expect(resultado.mensaje).toContain('creado exitosamente');

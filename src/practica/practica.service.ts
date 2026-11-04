@@ -9,10 +9,95 @@ export class PracticaService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Obtiene banco de preguntas formateado exactamente según PreguntaAcademica
+   * Obtiene banco de preguntas formateado exactamente según PreguntaAcademica.
+   * Regla de negocio crítica: Si un módulo o submódulo está suspendido/inactivo,
+   * sus preguntas NUNCA deben aparecer en prácticas ni simuladores.
    */
   async obtenerPreguntas(programaId?: string, areaId?: string, submoduloId?: string) {
+    const where: any = {
+      AND: [
+        // 1. Exclusión estricta: módulo y submódulo deben estar activos
+        {
+          OR: [
+            {
+              submodulo: {
+                activo: true,
+                programa: { activo: true },
+              },
+            },
+            {
+              submoduloId: null,
+              subarea: {
+                areaAcademica: {
+                  temarioVersion: {
+                    activo: true,
+                    programa: { activo: true },
+                  },
+                },
+              },
+            },
+          ],
+        },
+        // 2. Solo preguntas con versiones vigentes (no retiradas)
+        {
+          versiones: {
+            some: {
+              estado: { not: 'RETIRADA' },
+            },
+          },
+        },
+      ],
+    };
+
+    if (submoduloId && submoduloId.trim()) {
+      where.AND.push({
+        submoduloId: submoduloId.trim(),
+        submodulo: {
+          activo: true,
+          programa: { activo: true },
+        },
+      });
+    }
+
+    if (programaId && programaId.trim()) {
+      const progClean = programaId.toLowerCase().replace('caces-', '').replace('prog-', '').trim();
+      const progNum = Number(progClean);
+      where.AND.push({
+        OR: [
+          {
+            submodulo: {
+              OR: [
+                ...(isNaN(progNum) ? [] : [{ programaAcademicoId: progNum }]),
+                { programa: { nombre: { contains: progClean, mode: 'insensitive' } } },
+              ],
+            },
+          },
+          {
+            subarea: {
+              areaAcademica: {
+                temarioVersion: {
+                  OR: [
+                    ...(isNaN(progNum) ? [] : [{ programaAcademicoId: progNum }]),
+                    { programa: { nombre: { contains: progClean, mode: 'insensitive' } } },
+                  ],
+                },
+              },
+            },
+          },
+        ],
+      });
+    }
+
+    if (areaId && areaId.trim()) {
+      where.AND.push({
+        subarea: {
+          areaAcademicaId: areaId.trim(),
+        },
+      });
+    }
+
     const preguntasDb = await this.prisma.pregunta.findMany({
+      where,
       include: {
         casoClinico: true,
         submodulo: {
@@ -91,32 +176,7 @@ export class PracticaService {
         };
       });
 
-    // Filtros por carrera, submódulo o área
-    let resultado = preguntasFormateadas;
-
-    if (programaId) {
-      const progClean = programaId.toLowerCase().replace('caces-', '').replace('prog-', '');
-      const filtradas = resultado.filter((p) => p.programaId.includes(progClean));
-      if (filtradas.length > 0) {
-        resultado = filtradas;
-      }
-    }
-
-    if (submoduloId) {
-      const filtradasSub = resultado.filter((p) => p.submoduloId === submoduloId);
-      if (filtradasSub.length > 0) {
-        resultado = filtradasSub;
-      }
-    }
-
-    if (areaId) {
-      const filtradasArea = resultado.filter((p) => p.areaId === areaId);
-      if (filtradasArea.length > 0) {
-        resultado = filtradasArea;
-      }
-    }
-
-    return resultado;
+    return preguntasFormateadas;
   }
 
   /**

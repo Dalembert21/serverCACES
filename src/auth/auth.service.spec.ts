@@ -39,6 +39,12 @@ describe('AuthService', () => {
         findFirst: jest.fn(),
         updateMany: jest.fn(),
       },
+      programaAcademico: {
+        findFirst: jest.fn().mockResolvedValue({ id: 1, nombre: 'Medicina' }),
+      },
+      planSuscripcion: {
+        findFirst: jest.fn().mockResolvedValue({ id: 1, precioDolares: 0, duracionMeses: 12 }),
+      },
       $transaction: jest.fn((callback) => callback(prisma)),
     };
 

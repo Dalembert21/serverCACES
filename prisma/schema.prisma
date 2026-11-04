@@ -183,7 +183,6 @@ model SubmoduloAcademico {
   programaAcademicoId Int      @map("PROGRAMA_ACADEMICO_ID")
   nombre              String   @map("NOMBRE_SUBMODULO")
   descripcion         String?  @map("DESCRIPCION_SUBMODULO")
-  orden               Int      @default(0) @map("ORDEN_VISUALIZACION")
   activo              Boolean  @default(true) @map("ESTADO_ACTIVO")
   creadoEn            DateTime @default(now()) @db.Timestamptz @map("FECHA_CREACION")
   actualizadoEn       DateTime @updatedAt @db.Timestamptz @map("FECHA_ACTUALIZACION")

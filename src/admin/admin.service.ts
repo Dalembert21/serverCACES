@@ -45,6 +45,19 @@ export class AdminService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Resuelve los nombres completos o correos de una lista de IDs de usuario para auditoría humana
+   */
+  private async obtenerMapaNombresUsuarios(ids: (string | null | undefined)[]) {
+    const idsValidos = Array.from(new Set(ids.filter((id): id is string => Boolean(id))));
+    if (!idsValidos.length) return new Map<string, string>();
+    const usuarios = await this.prisma.usuario.findMany({
+      where: { id: { in: idsValidos } },
+      select: { id: true, nombreCompleto: true, correo: true },
+    });
+    return new Map(usuarios.map((u) => [u.id, u.nombreCompleto || u.correo]));
+  }
+
   // ============================================================================
   // 1. GESTIÓN DE ESTUDIANTES (AUDITORÍA, DETALLE, EDICIÓN Y SUSPENSIÓN)
   // ============================================================================
@@ -1254,6 +1267,9 @@ export class AdminService {
     const preguntas = await this.prisma.pregunta.findMany({
       where,
       include: {
+        creador: {
+          select: { id: true, nombreCompleto: true, correo: true },
+        },
         submodulo: {
           include: { programa: true },
         },
@@ -1282,14 +1298,22 @@ export class AdminService {
       orderBy: { creadoEn: 'desc' },
     });
 
+    const userMap = await this.obtenerMapaNombresUsuarios(preguntas.map((p) => p.modificadoPorId));
+
     return preguntas.map((p) => {
       const v = p.versiones[0];
       const multimedia = v?.activosMultimedia?.[0];
+      const modificadoPorNombre = p.modificadoPorId ? userMap.get(p.modificadoPorId) || null : null;
+      const modificadoTexto = modificadoPorNombre
+        ? `Modificado por ${modificadoPorNombre}`
+        : 'Sin modificaciones';
+
       return {
         id: p.id,
         codigoPublico: p.codigoPublico,
         submoduloId: p.submoduloId,
         submoduloNombre: p.submodulo?.nombre || null,
+        submoduloActivo: p.submodulo?.activo ?? true,
         programaId:
           p.submodulo?.programaAcademicoId ||
           p.subarea?.areaAcademica?.temarioVersion?.programaAcademicoId ||
@@ -1298,6 +1322,17 @@ export class AdminService {
           p.submodulo?.programa?.nombre ||
           p.subarea?.areaAcademica?.temarioVersion?.programa?.nombre ||
           'General',
+        programaActivo:
+          p.submodulo?.programa?.activo ??
+          p.subarea?.areaAcademica?.temarioVersion?.programa?.activo ??
+          true,
+        creadoPorId: p.creadorId,
+        creadorNombre: p.creador?.nombreCompleto || p.creador?.correo || 'Docente',
+        creadoEn: p.creadoEn,
+        modificadoPorId: p.modificadoPorId,
+        modificadoPorNombre,
+        modificadoTexto,
+        modificadoEn: p.modificadoPorId ? p.actualizadoEn : null,
         areaId: p.subarea?.areaAcademicaId || null,
         areaNombre: p.subarea?.areaAcademica?.nombre || null,
         subareaCodigo: p.subarea?.codigoOficial || null,
@@ -1568,7 +1603,7 @@ export class AdminService {
     const programas = await this.prisma.programaAcademico.findMany({
       include: {
         submodulos: {
-          orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+          orderBy: { nombre: 'asc' },
           include: {
             _count: {
               select: { preguntas: true },
@@ -1587,11 +1622,22 @@ export class AdminService {
       orderBy: { creadoEn: 'asc' },
     });
 
+    const userIds = [
+      ...programas.map((p) => p.creadoPorId),
+      ...programas.map((p) => p.modificadoPorId),
+    ];
+    const userMap = await this.obtenerMapaNombresUsuarios(userIds);
+
     return programas.map((prog) => {
       const totalPreguntas = prog.submodulos.reduce(
         (acum, s) => acum + (s._count?.preguntas ?? 0),
         0,
       );
+      const creadoPorNombre = prog.creadoPorId ? userMap.get(prog.creadoPorId) || 'Usuario Administrador' : null;
+      const modificadoPorNombre = prog.modificadoPorId ? userMap.get(prog.modificadoPorId) || 'Usuario Administrador' : null;
+      const modificadoTexto = modificadoPorNombre
+        ? `Modificado por ${modificadoPorNombre}`
+        : 'Sin modificaciones';
 
       return {
         id: prog.id,
@@ -1601,6 +1647,12 @@ export class AdminService {
         codigoCorto: prog.nombre.slice(0, 4).toUpperCase(),
         descripcion: `Submódulos clínicos y banco de preguntas de ${prog.nombre}.`,
         creadoEn: prog.creadoEn,
+        actualizadoEn: prog.actualizadoEn,
+        creadoPorId: prog.creadoPorId,
+        creadoPorNombre,
+        modificadoPorId: prog.modificadoPorId,
+        modificadoPorNombre,
+        modificadoTexto,
         totalSubmodulos: prog._count?.submodulos ?? prog.submodulos.length,
         totalPreguntas,
         submodulos: prog.submodulos.map((s) => ({
@@ -1608,7 +1660,6 @@ export class AdminService {
           programaId: s.programaAcademicoId,
           nombre: s.nombre,
           descripcion: s.descripcion,
-          orden: s.orden,
           activo: s.activo,
           totalPreguntas: s._count?.preguntas ?? 0,
         })),
@@ -1671,7 +1722,6 @@ export class AdminService {
           programaAcademicoId: programa.id,
           nombre: `${dto.nombre.trim()} General`,
           descripcion: `Submódulo general y fundamentos de ${dto.nombre.trim()}`,
-          orden: 1,
           activo: true,
         },
       });
@@ -1712,6 +1762,19 @@ export class AdminService {
           where: { id: programa.id },
           data,
         });
+
+        // Cascada de estado: Si se suspende o reactiva un módulo por completo,
+        // sus submódulos y configuraciones deben replicar el estado inmediatamente.
+        if (dto.activo !== undefined) {
+          await tx.submoduloAcademico.updateMany({
+            where: { programaAcademicoId: programa.id },
+            data: { activo: dto.activo },
+          });
+          await tx.configuracionSimulador.updateMany({
+            where: { programaAcademicoId: programa.id },
+            data: { activo: dto.activo },
+          });
+        }
       }
 
       if (
@@ -1904,21 +1967,38 @@ export class AdminService {
           select: { preguntas: true },
         },
       },
-      orderBy: [{ orden: 'asc' }, { nombre: 'asc' }],
+      orderBy: { nombre: 'asc' },
     });
 
-    return submodulos.map((s) => ({
-      id: s.id,
-      programaId: s.programaAcademicoId,
-      programaNombre: s.programa.nombre,
-      nombre: s.nombre,
-      descripcion: s.descripcion,
-      orden: s.orden,
-      activo: s.activo,
-      totalPreguntas: s._count.preguntas,
-      creadoEn: s.creadoEn,
-      actualizadoEn: s.actualizadoEn,
-    }));
+    const userIds = [
+      ...submodulos.map((s) => s.creadoPorId),
+      ...submodulos.map((s) => s.modificadoPorId),
+    ];
+    const userMap = await this.obtenerMapaNombresUsuarios(userIds);
+
+    return submodulos.map((s) => {
+      const creadoPorNombre = s.creadoPorId ? userMap.get(s.creadoPorId) || 'Usuario Administrador' : null;
+      const modificadoPorNombre = s.modificadoPorId ? userMap.get(s.modificadoPorId) || 'Usuario Administrador' : null;
+      const modificadoTexto = modificadoPorNombre ? `Modificado por ${modificadoPorNombre}` : 'Sin modificaciones';
+
+      return {
+        id: s.id,
+        programaId: s.programaAcademicoId,
+        programaNombre: s.programa.nombre,
+        programaActivo: s.programa.activo,
+        nombre: s.nombre,
+        descripcion: s.descripcion,
+        activo: s.activo,
+        totalPreguntas: s._count.preguntas,
+        creadoEn: s.creadoEn,
+        actualizadoEn: s.actualizadoEn,
+        creadoPorId: s.creadoPorId,
+        creadoPorNombre,
+        modificadoPorId: s.modificadoPorId,
+        modificadoPorNombre,
+        modificadoTexto,
+      };
+    });
   }
 
   /**
@@ -1939,17 +2019,30 @@ export class AdminService {
       throw new NotFoundException(`Submódulo académico con ID "${id}" no encontrado`);
     }
 
+    const userMap = await this.obtenerMapaNombresUsuarios([
+      submodulo.creadoPorId,
+      submodulo.modificadoPorId,
+    ]);
+    const creadoPorNombre = submodulo.creadoPorId ? userMap.get(submodulo.creadoPorId) || 'Usuario Administrador' : null;
+    const modificadoPorNombre = submodulo.modificadoPorId ? userMap.get(submodulo.modificadoPorId) || 'Usuario Administrador' : null;
+    const modificadoTexto = modificadoPorNombre ? `Modificado por ${modificadoPorNombre}` : 'Sin modificaciones';
+
     return {
       id: submodulo.id,
       programaId: submodulo.programaAcademicoId,
       programaNombre: submodulo.programa.nombre,
+      programaActivo: submodulo.programa.activo,
       nombre: submodulo.nombre,
       descripcion: submodulo.descripcion,
-      orden: submodulo.orden,
       activo: submodulo.activo,
       totalPreguntas: submodulo._count.preguntas,
       creadoEn: submodulo.creadoEn,
       actualizadoEn: submodulo.actualizadoEn,
+      creadoPorId: submodulo.creadoPorId,
+      creadoPorNombre,
+      modificadoPorId: submodulo.modificadoPorId,
+      modificadoPorNombre,
+      modificadoTexto,
     };
   }
 
@@ -1998,24 +2091,36 @@ export class AdminService {
         programaAcademicoId: programa.id,
         nombre: nombreNormalizado,
         descripcion: dto.descripcion || null,
-        orden: dto.orden !== undefined ? dto.orden : 0,
         activo: dto.activo !== undefined ? dto.activo : true,
       },
       include: { programa: true },
     });
 
+    const userMap = await this.obtenerMapaNombresUsuarios([submodulo.creadoPorId]);
+    const creadoPorNombre = submodulo.creadoPorId ? userMap.get(submodulo.creadoPorId) || 'Usuario Administrador' : null;
+
+    const submoduloPayload = {
+      id: submodulo.id,
+      programaId: submodulo.programaAcademicoId,
+      programaNombre: submodulo.programa.nombre,
+      nombre: submodulo.nombre,
+      descripcion: submodulo.descripcion,
+      activo: submodulo.activo,
+      totalPreguntas: 0,
+      creadoEn: submodulo.creadoEn,
+      actualizadoEn: submodulo.actualizadoEn,
+      creadoPorId: submodulo.creadoPorId,
+      creadoPorNombre,
+      modificadoPorId: null,
+      modificadoPorNombre: null,
+      modificadoTexto: 'Sin modificaciones',
+    };
+
     return {
       mensaje: 'Submódulo académico creado exitosamente',
-      submodulo: {
-        id: submodulo.id,
-        programaId: submodulo.programaAcademicoId,
-        programaNombre: submodulo.programa.nombre,
-        nombre: submodulo.nombre,
-        descripcion: submodulo.descripcion,
-        orden: submodulo.orden,
-        activo: submodulo.activo,
-        creadoEn: submodulo.creadoEn,
-      },
+      datos: submoduloPayload,
+      submodulo: submoduloPayload,
+      ...submoduloPayload,
     };
   }
 
@@ -2060,10 +2165,6 @@ export class AdminService {
       dataToUpdate.descripcion = dto.descripcion ? dto.descripcion.trim() : null;
     }
 
-    if (dto.orden !== undefined) {
-      dataToUpdate.orden = dto.orden;
-    }
-
     if (dto.activo !== undefined) {
       dataToUpdate.activo = dto.activo;
     }
@@ -2077,19 +2178,38 @@ export class AdminService {
       },
     });
 
+    const userMap = await this.obtenerMapaNombresUsuarios([
+      actualizado.creadoPorId,
+      actualizado.modificadoPorId,
+    ]);
+    const creadoPorNombre = actualizado.creadoPorId ? userMap.get(actualizado.creadoPorId) || 'Usuario Administrador' : null;
+    const modificadoPorNombre = actualizado.modificadoPorId ? userMap.get(actualizado.modificadoPorId) || 'Usuario Administrador' : null;
+    const modificadoTexto = modificadoPorNombre
+      ? `Modificado por ${modificadoPorNombre}`
+      : 'Sin modificaciones';
+
+    const submoduloPayload = {
+      id: actualizado.id,
+      programaId: actualizado.programaAcademicoId,
+      programaNombre: actualizado.programa.nombre,
+      nombre: actualizado.nombre,
+      descripcion: actualizado.descripcion,
+      activo: actualizado.activo,
+      totalPreguntas: actualizado._count.preguntas,
+      creadoEn: actualizado.creadoEn,
+      actualizadoEn: actualizado.actualizadoEn,
+      creadoPorId: actualizado.creadoPorId,
+      creadoPorNombre,
+      modificadoPorId: actualizado.modificadoPorId,
+      modificadoPorNombre,
+      modificadoTexto,
+    };
+
     return {
       mensaje: 'Submódulo académico actualizado exitosamente',
-      submodulo: {
-        id: actualizado.id,
-        programaId: actualizado.programaAcademicoId,
-        programaNombre: actualizado.programa.nombre,
-        nombre: actualizado.nombre,
-        descripcion: actualizado.descripcion,
-        orden: actualizado.orden,
-        activo: actualizado.activo,
-        totalPreguntas: actualizado._count.preguntas,
-        actualizadoEn: actualizado.actualizadoEn,
-      },
+      datos: submoduloPayload,
+      submodulo: submoduloPayload,
+      ...submoduloPayload,
     };
   }
 
@@ -2111,11 +2231,24 @@ export class AdminService {
       data: { activo: nuevoEstado },
     });
 
-    return {
-      mensaje: `Submódulo académico ${nuevoEstado ? 'activado' : 'desactivado'} exitosamente`,
+    const userMap = await this.obtenerMapaNombresUsuarios([actualizado.modificadoPorId]);
+    const modificadoPorNombre = actualizado.modificadoPorId ? userMap.get(actualizado.modificadoPorId) || 'Usuario Administrador' : null;
+    const modificadoTexto = modificadoPorNombre ? `Modificado por ${modificadoPorNombre}` : 'Sin modificaciones';
+
+    const submoduloPayload = {
       id: actualizado.id,
       nombre: actualizado.nombre,
       activo: actualizado.activo,
+      modificadoPorId: actualizado.modificadoPorId,
+      modificadoPorNombre,
+      modificadoTexto,
+    };
+
+    return {
+      mensaje: `Submódulo académico ${nuevoEstado ? 'activado' : 'desactivado'} exitosamente`,
+      datos: submoduloPayload,
+      submodulo: submoduloPayload,
+      ...submoduloPayload,
     };
   }
 

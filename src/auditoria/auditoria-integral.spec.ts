@@ -91,7 +91,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
         return prisma.programaAcademico.create({
           data: {
             id: testModuleId,
-            nombre: 'Módulo de Prueba Auditoría 1',
+            nombre: 'MOD_AUDIT_' + testModuleId,
             activo: true,
           },
         });
@@ -102,7 +102,8 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
     expect(createdRecord.id).toBe(testModuleId);
     expect(createdRecord.creadoPorId).toBe(admin1Id);
     expect(createdRecord.creadoEn).toBeInstanceOf(Date);
-    expect(createdRecord.modificadoPorId).toBe(admin1Id);
+    // Al crearse, todavía no existe modificación previa
+    expect(createdRecord.modificadoPorId).toBeNull();
 
     // Esperar registro asíncrono/trigger de auditoría en PostgreSQL
     const trazabilidad = await auditoriaService.consultarTrazabilidadRegistro(
@@ -133,7 +134,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
         return prisma.programaAcademico.update({
           where: { id: testModuleId },
           data: {
-            nombre: 'Módulo Modificado por Admin 2',
+            nombre: 'MOD_AUDIT_MOD_' + testModuleId,
           },
         });
       },
@@ -177,7 +178,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
         return prisma.programaAcademico.update({
           where: { id: testModuleId },
           data: {
-            nombre: 'Intento de Hackeo de Creador',
+            nombre: 'Intento de Hackeo de Creador ' + testModuleId,
             // El atacante intenta sobreescribir el creador original
             creadoPorId: fakeCreatorId as any,
           },

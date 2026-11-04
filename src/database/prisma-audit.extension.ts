@@ -62,8 +62,9 @@ export function createAuditExtension(auditContextService?: AuditContextService) 
               if (MODELS_WITH_CREADO_POR.has(model)) {
                 data.creadoPorId = userId;
               }
+              // Al crearse la entidad, NO ha sido modificada todavía: modificadoPorId debe ser null
               if (MODELS_WITH_MODIFICADO_POR.has(model)) {
-                data.modificadoPorId = userId;
+                data.modificadoPorId = null;
               }
 
               // Entidades con campos creadores específicos
@@ -91,7 +92,7 @@ export function createAuditExtension(auditContextService?: AuditContextService) 
                     data.creadoPorId = userId;
                   }
                   if (MODELS_WITH_MODIFICADO_POR.has(model)) {
-                    data.modificadoPorId = userId;
+                    data.modificadoPorId = null;
                   }
                 }
               }
@@ -153,7 +154,7 @@ export function createAuditExtension(auditContextService?: AuditContextService) 
                 createData.creadoPorId = userId;
               }
               if (MODELS_WITH_MODIFICADO_POR.has(model)) {
-                createData.modificadoPorId = userId;
+                createData.modificadoPorId = null;
               }
             }
 
