@@ -18,6 +18,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
   const admin2Id = 'ADMIN_2_' + Date.now();
   const estudianteId = 'ESTUDIANTE_' + Date.now();
   const testModuleId = Math.floor(100000 + Math.random() * 800000);
+  const modulosCreadosIds: number[] = [testModuleId];
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -61,14 +62,13 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
   });
 
   afterAll(async () => {
-    // Limpieza y desactivación de datos de prueba
+    // Limpieza completa de datos de prueba
     try {
       await prisma.programaAcademico.deleteMany({
-        where: { nombre: { startsWith: 'MOD_AUDIT_' } },
+        where: { id: { in: modulosCreadosIds } },
       });
-      await prisma.usuario.updateMany({
+      await prisma.usuario.deleteMany({
         where: { id: { in: [admin1Id, admin2Id, estudianteId] } },
-        data: { activo: false },
       });
     } catch {
       // Ignorar cleanup errors
@@ -197,6 +197,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
   // ============================================================================
   it('Prueba 4: Eliminación - Se elimina un registro y se conserva la trazabilidad del DELETE y usuario responsable', async () => {
     const tempModuleId = Math.floor(600000 + Math.random() * 800000);
+    modulosCreadosIds.push(tempModuleId);
 
     // Crear registro temporal
     await auditContextService.runWithContext(
@@ -239,6 +240,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
   // ============================================================================
   it('Prueba 5: Procesos automáticos - Operación ejecutada sin usuario autenticado se identifica como PROCESO_AUTOMATICO / SISTEMA', async () => {
     const cronModuleId = Math.floor(700000 + Math.random() * 800000);
+    modulosCreadosIds.push(cronModuleId);
 
     const record = await auditContextService.runWithContext(
       {
@@ -275,6 +277,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
   // ============================================================================
   it('Prueba 6: Transacciones - La modificación de negocio y el historial se ejecutan de manera atómica y consistente', async () => {
     const txModuleId = Math.floor(800000 + Math.random() * 800000);
+    modulosCreadosIds.push(txModuleId);
 
     await prisma.$transaction(async (tx) => {
       await tx.programaAcademico.create({
@@ -308,6 +311,7 @@ describe('Auditoría Integral y Control de Cambios en Backend (Pruebas Obligator
   it('Prueba 7: Operaciones masivas - Actualización masiva conserva modificadoPor y trazabilidad para todos los registros', async () => {
     const id1 = Math.floor(900000 + Math.random() * 800000);
     const id2 = Math.floor(1000000 + Math.random() * 800000);
+    modulosCreadosIds.push(id1, id2);
 
     await auditContextService.runWithContext(
       { usuarioId: admin1Id, tipoActor: 'USUARIO' },
